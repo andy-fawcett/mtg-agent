@@ -1,0 +1,46 @@
+{
+  "name": "mtg-agent-backend",
+  "version": "1.0.0",
+  "description": "MTG Agent Backend API",
+  "main": "dist/index.js",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"Tests coming in Phase 1.7\" && exit 0",
+    "preinstall": "npx only-allow pnpm"
+  },
+  "keywords": ["mtg", "magic-the-gathering", "claude", "ai"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "helmet": "^8.1.0",
+    "dotenv": "^17.2.3",
+    "@anthropic-ai/sdk": "^0.68.0",
+    "pg": "^8.16.3",
+    "ioredis": "^5.8.2",
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^4.1.12",
+    "rate-limiter-flexible": "^8.1.0",
+    "typescript": "^5.9.3",
+    "tsx": "^4.20.6",
+    "@types/node": "^24.9.2",
+    "@types/express": "^5.0.5",
+    "@types/cors": "^2.8.19",
+    "@types/bcrypt": "^6.0.0",
+    "@types/jsonwebtoken": "^9.0.10"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "@types/pg": "^8.15.6"
+  }
+}
