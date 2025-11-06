@@ -1,22 +1,22 @@
 # MTG Agent - Project Status
 
-**Last Updated:** 2025-11-04
-**Current Phase:** Phase 1 (MVP) - Foundation Complete
-**Current Task:** Phase 1.1 - Database Layer
-**Overall Progress:** 12.5% implementation (1/8 sub-phases complete)
+**Last Updated:** 2025-11-05
+**Current Phase:** Phase 1 (MVP) - Database Complete
+**Current Task:** Phase 1.2 - Authentication
+**Overall Progress:** 25% implementation (2/8 sub-phases complete)
 
 ---
 
 ## 📊 Phase Progress Overview
 
 ### Phase 1: MVP - Internal Use Only
-**Target:** 2 weeks (40-60 hours) | **Status:** 🚀 In Progress | **Progress:** 12.5%
+**Target:** 2 weeks (40-60 hours) | **Status:** 🚀 In Progress | **Progress:** 25%
 
 - [x] **Phase 1.0: Foundation** (4-6 hours) - ✅ Complete
   - Project structure, TypeScript, Docker, Express server
 
-- [ ] **Phase 1.1: Database** (6-8 hours) - ⏸️ Not Started
-  - PostgreSQL schema, migrations, user models
+- [x] **Phase 1.1: Database** (6-8 hours) - ✅ Complete
+  - PostgreSQL schema with token breakdown, migrations, models with actual cost tracking
 
 - [ ] **Phase 1.2: Authentication** (8-10 hours) - ⏸️ Not Started
   - JWT auth, bcrypt, user registration/login
@@ -52,22 +52,23 @@
 
 ## 🎯 Current Session
 
-**Completed:** Phase 1.0 - Foundation & Project Setup ✅
+**Completed:** Phase 1.1 - Database Layer ✅
 
-**Next Up:** Phase 1.1 - Database Layer
+**Next Up:** Phase 1.2 - Authentication
 
-**What Phase 1.1 Includes:**
-- PostgreSQL schema design
-- Database migrations
-- User models and types
-- Database connection pooling
-- Query helpers
+**What Phase 1.2 Includes:**
+- JWT authentication system
+- Bcrypt password hashing
+- User registration endpoint
+- User login endpoint
+- Auth middleware
+- Token refresh mechanism
 
-**Time Estimate:** 6-8 hours
+**Time Estimate:** 8-10 hours
 
-**Ready to proceed with Phase 1.1?** Use `/start` to continue.
+**Ready to proceed with Phase 1.2?** Use `/start` to continue.
 
-**Documentation:** `docs/implementation/PHASE_1_MVP/PHASE_1.0_FOUNDATION.md`
+**Documentation:** `docs/implementation/PHASE_1_MVP/PHASE_1.2_AUTH.md`
 
 ---
 
@@ -79,6 +80,17 @@ None currently.
 
 ## 📝 Recent Activity
 
+- **2025-11-05:** ✅ Phase 1.1 Database Layer Complete
+  - Database schema created with 4 tables (users, sessions, chat_logs, daily_costs)
+  - Migration system implemented
+  - User model with full CRUD operations
+  - ChatLog model with token breakdown (input_tokens, output_tokens)
+  - Changed from estimated_cost_cents to actual_cost_cents
+  - DailyCost model with budget tracking
+  - All indexes and foreign keys working
+  - Transaction support for data integrity
+  - Soft delete implementation
+  - Comprehensive tests passing
 - **2025-11-04:** ✅ Phase 1.0 Foundation Complete
   - Backend structure created
   - pnpm v10.20.0 installed with security configuration
@@ -94,29 +106,42 @@ None currently.
 
 ## 📌 Next Steps
 
-1. Run `/start` to begin Phase 1.0 (Foundation)
-2. Follow step-by-step tasks in PHASE_1.0_FOUNDATION.md
-3. Verify each task with provided commands
+1. Run `/start` to begin Phase 1.2 (Authentication)
+2. Follow step-by-step tasks in PHASE_1.2_AUTH.md
+3. Implement JWT auth, bcrypt, registration/login endpoints
 4. Update this STATUS.md as tasks complete
 
 ---
 
 ## 🔐 Security Checklist (Current Phase)
 
+Phase 1.1 Security Requirements:
+- [x] Parameterized queries prevent SQL injection
+- [x] Password hashes stored (never plain text)
+- [x] Soft deletes preserve audit trail
+- [x] Connection pooling limits set
+- [x] Transaction support for data integrity
+- [x] Indexes don't expose sensitive data
+
 Phase 1.0 Security Requirements:
-- [ ] .env files not committed to git
-- [ ] Docker Compose uses secure default passwords (dev only)
-- [ ] CORS properly configured
-- [ ] Security headers configured (helmet)
+- [x] .env files not committed to git
+- [x] Docker Compose uses secure default passwords (dev only)
+- [x] CORS properly configured
+- [x] Security headers configured (helmet)
 
 ---
 
 ## 📚 Key Documentation
 
 **For Current Phase:**
-- [Phase 1.0 Tasks](docs/implementation/PHASE_1_MVP/PHASE_1.0_FOUNDATION.md)
+- [Phase 1.2 Tasks](docs/implementation/PHASE_1_MVP/PHASE_1.2_AUTH.md)
 - [Phase 1 Overview](docs/implementation/PHASE_1_MVP/README.md)
 - [NPM Security (CRITICAL)](docs/reference/NPM_SECURITY.md)
+- [Security Architecture](docs/reference/SECURITY_ARCHITECTURE.md)
+
+**Completed Phases:**
+- [Phase 1.1 Database Layer](docs/implementation/PHASE_1_MVP/PHASE_1.1_DATABASE.md)
+- [Phase 1.0 Foundation](docs/implementation/PHASE_1_MVP/PHASE_1.0_FOUNDATION.md)
 
 **Architecture:**
 - [Security Architecture](docs/reference/SECURITY_ARCHITECTURE.md)
