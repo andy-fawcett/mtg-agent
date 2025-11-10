@@ -3,6 +3,22 @@ import { DailyCost } from '../types/database.types';
 
 export class DailyCostModel {
   /**
+   * Normalize DailyCost data - convert bigint strings to numbers
+   * PostgreSQL bigint columns are returned as strings by pg library
+   */
+  private static normalize(row: any): DailyCost {
+    return {
+      ...row,
+      total_cost_cents: typeof row.total_cost_cents === 'string'
+        ? parseInt(row.total_cost_cents, 10)
+        : row.total_cost_cents,
+      total_tokens: typeof row.total_tokens === 'string'
+        ? parseInt(row.total_tokens, 10)
+        : row.total_tokens,
+    };
+  }
+
+  /**
    * Get today's costs
    */
   static async getToday(): Promise<DailyCost> {
@@ -15,7 +31,7 @@ export class DailyCostModel {
       return this.createToday();
     }
 
-    return result.rows[0]!;
+    return this.normalize(result.rows[0]!);
   }
 
   /**
@@ -29,7 +45,7 @@ export class DailyCostModel {
        RETURNING *`
     );
 
-    return result.rows[0]!;
+    return this.normalize(result.rows[0]!);
   }
 
   /**
@@ -85,7 +101,7 @@ export class DailyCostModel {
       [date]
     );
 
-    return result.rows[0] || null;
+    return result.rows[0] ? this.normalize(result.rows[0]) : null;
   }
 
   /**
@@ -98,7 +114,7 @@ export class DailyCostModel {
        ORDER BY date DESC`
     );
 
-    return result.rows;
+    return result.rows.map(row => this.normalize(row));
   }
 
   /**
