@@ -2,6 +2,8 @@ import express, { Request, Response, NextFunction, Express } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import session from 'express-session';
+import { getSessionConfig } from './config/session';
 
 // Load environment variables first
 dotenv.config();
@@ -32,6 +34,12 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // ======================
+// Session Management
+// ======================
+// Session middleware must be added BEFORE routes that need authentication
+app.use(session(getSessionConfig()));
+
+// ======================
 // Request Logging
 // ======================
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -42,6 +50,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   });
   next();
 });
+
+// ======================
+// API Routes
+// ======================
+import authRoutes from './routes/auth';
+
+app.use('/api/auth', authRoutes);
 
 // ======================
 // Health Check Endpoint

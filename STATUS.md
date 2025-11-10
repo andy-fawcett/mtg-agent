@@ -1,16 +1,16 @@
 # MTG Agent - Project Status
 
-**Last Updated:** 2025-11-05
-**Current Phase:** Phase 1 (MVP) - Database Complete
-**Current Task:** Phase 1.2 - Authentication
-**Overall Progress:** 25% implementation (2/8 sub-phases complete)
+**Last Updated:** 2025-11-09
+**Current Phase:** Phase 1 (MVP) - Authentication Complete
+**Current Task:** Phase 1.3 - Rate Limiting
+**Overall Progress:** 38% implementation (3/8 sub-phases complete)
 
 ---
 
 ## 📊 Phase Progress Overview
 
 ### Phase 1: MVP - Internal Use Only
-**Target:** 2 weeks (40-60 hours) | **Status:** 🚀 In Progress | **Progress:** 25%
+**Target:** 2 weeks (40-60 hours) | **Status:** 🚀 In Progress | **Progress:** 38%
 
 - [x] **Phase 1.0: Foundation** (4-6 hours) - ✅ Complete
   - Project structure, TypeScript, Docker, Express server
@@ -18,7 +18,7 @@
 - [x] **Phase 1.1: Database** (6-8 hours) - ✅ Complete
   - PostgreSQL schema with token breakdown, migrations, models with actual cost tracking
 
-- [ ] **Phase 1.2: Authentication** (6-7 hours) - ⏸️ Not Started
+- [x] **Phase 1.2: Authentication** (6-7 hours) - ✅ Complete
   - Session-based auth (Redis), bcrypt, user registration/login/logout
 
 - [ ] **Phase 1.3: Rate Limiting** (6-8 hours) - ⏸️ Not Started
@@ -52,25 +52,25 @@
 
 ## 🎯 Current Session
 
-**Completed:** Phase 1.1 - Database Layer ✅
+**Completed:** Phase 1.2 - Authentication ✅
 
-**Next Up:** Phase 1.2 - Authentication
+**Next Up:** Phase 1.3 - Rate Limiting & Cost Controls
 
-**What Phase 1.2 Includes:**
-- Session-based authentication with Redis
-- Bcrypt password hashing (cost factor 12)
-- User registration endpoint
-- User login endpoint
-- User logout endpoint (true logout with session destruction)
-- Auth middleware (requireAuth, optionalAuth, requireTier)
+**What Phase 1.3 Includes:**
+- Redis-based rate limiting per user tier
+- Budget tracking and enforcement
+- Daily spending caps
+- Rate limit middleware
+- Cost estimation before API calls
+- Admin controls for budget management
 
-**Time Estimate:** 6-7 hours
+**Time Estimate:** 6-8 hours
 
-**Architecture:** Server-side sessions with Redis for immediate user revocation.
+**Architecture:** rate-limiter-flexible with Redis for distributed rate limiting.
 
-**Ready to proceed with Phase 1.2?** Use `/start` to continue.
+**Ready to proceed with Phase 1.3?** Use `/start` to continue.
 
-**Documentation:** `docs/implementation/PHASE_1_MVP/PHASE_1.2_AUTH.md`
+**Documentation:** `docs/implementation/PHASE_1_MVP/PHASE_1.3_RATE_LIMITING.md`
 
 ---
 
@@ -82,6 +82,16 @@ None currently.
 
 ## 📝 Recent Activity
 
+- **2025-11-09:** ✅ Phase 1.2 Authentication Complete
+  - Password utilities with bcrypt hashing (cost factor 12)
+  - Session store configuration with Redis (express-session + connect-redis)
+  - Authentication service (register, login, logout, getUserFromSession)
+  - Authentication middleware (requireAuth, optionalAuth, requireTier)
+  - Auth API routes (POST /register, POST /login, POST /logout, GET /me)
+  - All endpoints tested and verified
+  - Sessions stored in Redis with proper security (HttpOnly, Secure, SameSite)
+  - Password strength validation (min 12 chars, complexity requirements)
+  - Email uniqueness validation
 - **2025-11-05:** ✅ Phase 1.1 Database Layer Complete
   - Database schema created with 4 tables (users, sessions, chat_logs, daily_costs)
   - Migration system implemented
@@ -108,14 +118,24 @@ None currently.
 
 ## 📌 Next Steps
 
-1. Run `/start` to begin Phase 1.2 (Authentication)
-2. Follow step-by-step tasks in PHASE_1.2_AUTH.md
-3. Implement session-based auth, bcrypt, registration/login endpoints
+1. Run `/start` to begin Phase 1.3 (Rate Limiting & Cost Controls)
+2. Follow step-by-step tasks in PHASE_1.3_RATE_LIMITING.md
+3. Implement Redis rate limiting, budget tracking, cost controls
 4. Update this STATUS.md as tasks complete
 
 ---
 
 ## 🔐 Security Checklist (Current Phase)
+
+Phase 1.2 Security Requirements:
+- [x] Passwords hashed with bcrypt (cost factor 12)
+- [x] Password strength validation (min 12 chars, complexity)
+- [x] Session cookies secure (HttpOnly, Secure, SameSite)
+- [x] Sessions stored in Redis with prefix
+- [x] Session-based auth enables immediate user revocation
+- [x] Generic error messages prevent email enumeration
+- [x] Auth middleware validates session on each request
+- [x] Deleted users handled gracefully (session destroyed)
 
 Phase 1.1 Security Requirements:
 - [x] Parameterized queries prevent SQL injection
@@ -136,12 +156,13 @@ Phase 1.0 Security Requirements:
 ## 📚 Key Documentation
 
 **For Current Phase:**
-- [Phase 1.2 Tasks](docs/implementation/PHASE_1_MVP/PHASE_1.2_AUTH.md)
+- [Phase 1.3 Tasks](docs/implementation/PHASE_1_MVP/PHASE_1.3_RATE_LIMITING.md)
 - [Phase 1 Overview](docs/implementation/PHASE_1_MVP/README.md)
 - [NPM Security (CRITICAL)](docs/reference/NPM_SECURITY.md)
 - [Security Architecture](docs/reference/SECURITY_ARCHITECTURE.md)
 
 **Completed Phases:**
+- [Phase 1.2 Authentication](docs/implementation/PHASE_1_MVP/PHASE_1.2_AUTH.md)
 - [Phase 1.1 Database Layer](docs/implementation/PHASE_1_MVP/PHASE_1.1_DATABASE.md)
 - [Phase 1.0 Foundation](docs/implementation/PHASE_1_MVP/PHASE_1.0_FOUNDATION.md)
 
