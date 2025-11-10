@@ -134,7 +134,7 @@ All contributions MUST follow these security rules:
 
 4. **Authentication:**
    - ✅ ALWAYS hash passwords with bcrypt (cost 12+)
-   - ✅ ALWAYS use strong JWT secrets (64+ chars)
+   - ✅ ALWAYS use strong SESSION_SECRET (64+ chars)
    - ❌ NEVER store passwords in plaintext
 
 5. **Error Handling:**
@@ -392,7 +392,7 @@ Closes #[issue number]
 
 ```bash
 # Feature
-git commit -m "feat(auth): add JWT token refresh endpoint
+git commit -m "feat(auth): add session refresh mechanism
 
 Implements token refresh to allow users to stay logged in.
 Tokens expire after 7 days but can be refreshed.

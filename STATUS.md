@@ -18,8 +18,8 @@
 - [x] **Phase 1.1: Database** (6-8 hours) - ✅ Complete
   - PostgreSQL schema with token breakdown, migrations, models with actual cost tracking
 
-- [ ] **Phase 1.2: Authentication** (8-10 hours) - ⏸️ Not Started
-  - JWT auth, bcrypt, user registration/login
+- [ ] **Phase 1.2: Authentication** (6-7 hours) - ⏸️ Not Started
+  - Session-based auth (Redis), bcrypt, user registration/login/logout
 
 - [ ] **Phase 1.3: Rate Limiting** (6-8 hours) - ⏸️ Not Started
   - Redis rate limiting, budget controls
@@ -57,14 +57,16 @@
 **Next Up:** Phase 1.2 - Authentication
 
 **What Phase 1.2 Includes:**
-- JWT authentication system
-- Bcrypt password hashing
+- Session-based authentication with Redis
+- Bcrypt password hashing (cost factor 12)
 - User registration endpoint
 - User login endpoint
-- Auth middleware
-- Token refresh mechanism
+- User logout endpoint (true logout with session destruction)
+- Auth middleware (requireAuth, optionalAuth, requireTier)
 
-**Time Estimate:** 8-10 hours
+**Time Estimate:** 6-7 hours
+
+**Architecture:** Server-side sessions with Redis for immediate user revocation.
 
 **Ready to proceed with Phase 1.2?** Use `/start` to continue.
 
@@ -96,7 +98,7 @@ None currently.
   - pnpm v10.20.0 installed with security configuration
   - TypeScript strict mode configured
   - Docker Compose running (PostgreSQL on 5434, Redis on 6379)
-  - Environment variables configured with secure JWT secret
+  - Environment variables configured with secure SESSION_SECRET
   - Express server with health endpoint working
 - **2025-01-04:** Project documentation completed
 - **2025-01-04:** STATUS.md tracking file created
@@ -108,7 +110,7 @@ None currently.
 
 1. Run `/start` to begin Phase 1.2 (Authentication)
 2. Follow step-by-step tasks in PHASE_1.2_AUTH.md
-3. Implement JWT auth, bcrypt, registration/login endpoints
+3. Implement session-based auth, bcrypt, registration/login endpoints
 4. Update this STATUS.md as tasks complete
 
 ---
@@ -159,6 +161,13 @@ Phase 1.0 Security Requirements:
 - TypeScript strict mode enforced
 - Security-first approach from day one
 - All API keys server-side only
+
+### Architectural Decisions
+
+**Phase 1.2 - Authentication:**
+- Server-side sessions with Redis
+- Immediate user revocation for cost control
+- Session-based auth enables instant user bans
 
 ---
 

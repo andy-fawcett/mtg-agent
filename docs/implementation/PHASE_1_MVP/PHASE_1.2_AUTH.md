@@ -1,22 +1,33 @@
 # Phase 1.2: Authentication & Authorization
 
 **Status:** ⏸️ Not Started
-**Duration Estimate:** 8-10 hours
+**Duration Estimate:** 6-7 hours
 **Prerequisites:** Phase 1.0 (Foundation) + Phase 1.1 (Database) complete
-**Dependencies:** User model, bcrypt, jsonwebtoken
+**Dependencies:** User model, bcrypt, express-session, connect-redis
 
 ## Objectives
 
-Implement secure authentication system with JWT tokens, password hashing, and tier-based authorization.
+Implement secure authentication system with server-side sessions, password hashing, and tier-based authorization.
 
 - User registration with strong password requirements
-- Login with JWT token generation
+- Login with Redis-backed session creation
 - Password hashing with bcrypt (cost factor 12)
-- JWT token validation middleware
-- Anonymous session support for trials
+- Session validation middleware
+- True logout capability (immediate session destruction)
 - User tier system (anonymous, free, premium)
 - Email uniqueness validation
 - Password strength enforcement
+
+## Architecture Overview
+
+**Authentication Method:** Server-side sessions with Redis
+
+**Key Features:**
+- ✅ **Immediate revocation** - Can ban abusive users instantly (critical for cost control)
+- ✅ **True logout** - Session destroyed on logout
+- ✅ **Active session tracking** - See all logged-in users, detect suspicious activity
+- ✅ **Redis-backed** - Fast session lookups using existing infrastructure
+- ✅ **Cost control** - Stop API spending immediately when needed
 
 ---
 
@@ -178,163 +189,152 @@ rm test-password.ts
 
 ---
 
-## Task 1.2.2: JWT Utilities
+## Task 1.2.2: Session Store Configuration
 
-**Estimated Time:** 45 minutes
+**Estimated Time:** 30 minutes
 
 ### Objectives
 
-Create JWT token generation and validation utilities.
+Configure express-session with Redis store for secure session management.
 
 ### Steps
 
-**Create `backend/src/utils/jwt.ts`:**
+**1. Install dependencies:**
+
+```bash
+cd backend
+pnpm install express-session connect-redis
+pnpm install -D @types/express-session
+```
+
+**2. Create `backend/src/config/session.ts`:**
 
 ```typescript
-import jwt from 'jsonwebtoken';
+import session from 'express-session';
+import RedisStore from 'connect-redis';
+import { redisClient } from './redis';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required');
+// Session configuration
+if (!process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET environment variable is required');
 }
 
-if (JWT_SECRET.length < 32) {
-  throw new Error('JWT_SECRET must be at least 32 characters');
+if (process.env.SESSION_SECRET.length < 32) {
+  throw new Error('SESSION_SECRET must be at least 32 characters');
 }
 
-export interface JWTPayload {
-  userId: string;
-  email: string;
-  tier: string;
-}
+export const sessionConfig: session.SessionOptions = {
+  store: new RedisStore({
+    client: redisClient,
+    prefix: 'sess:',
+  }),
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  name: 'mtg.sid', // Custom session cookie name (security through obscurity)
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    httpOnly: true, // Prevent XSS attacks
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+    sameSite: 'lax', // CSRF protection
+  },
+  rolling: true, // Reset expiration on every request
+};
 
-/**
- * Generate JWT token
- */
-export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: JWT_EXPIRES_IN,
-    issuer: 'mtg-agent-api',
-    audience: 'mtg-agent-client',
-  });
-}
-
-/**
- * Verify and decode JWT token
- */
-export function verifyToken(token: string): JWTPayload {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET, {
-      issuer: 'mtg-agent-api',
-      audience: 'mtg-agent-client',
-    });
-
-    return decoded as JWTPayload;
-  } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      throw new Error('Token expired');
-    }
-    if (error instanceof jwt.JsonWebTokenError) {
-      throw new Error('Invalid token');
-    }
-    throw error;
+// Extend Express session to include user data
+declare module 'express-session' {
+  interface SessionData {
+    userId: string;
+    email: string;
+    tier: string;
   }
 }
+```
 
-/**
- * Decode token without verification (for debugging)
- */
-export function decodeToken(token: string): JWTPayload | null {
-  try {
-    const decoded = jwt.decode(token);
-    return decoded as JWTPayload;
-  } catch {
-    return null;
-  }
-}
+**3. Verify Redis client exists at `backend/src/config/redis.ts`:**
 
-/**
- * Get token expiration time
- */
-export function getTokenExpiration(token: string): Date | null {
-  const decoded = jwt.decode(token) as any;
-  if (decoded && decoded.exp) {
-    return new Date(decoded.exp * 1000);
-  }
-  return null;
-}
+```typescript
+import Redis from 'ioredis';
+
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379');
+
+export const redisClient = new Redis({
+  host: REDIS_HOST,
+  port: REDIS_PORT,
+  retryStrategy: (times) => {
+    const delay = Math.min(times * 50, 2000);
+    return delay;
+  },
+});
+
+redisClient.on('error', (err) => {
+  console.error('Redis Client Error:', err);
+});
+
+redisClient.on('connect', () => {
+  console.log('✓ Redis connected');
+});
+```
+
+**4. Update `backend/src/index.ts` to use session middleware:**
+
+```typescript
+import express from 'express';
+import session from 'express-session';
+import { sessionConfig } from './config/session';
+
+const app = express();
+
+// Add session middleware BEFORE routes
+app.use(session(sessionConfig));
 ```
 
 ### Verification
 
 ```bash
 cd backend
-cat > test-jwt.ts << 'EOF'
-import { generateToken, verifyToken, getTokenExpiration } from './src/utils/jwt';
 
-async function test() {
-  console.log('Testing JWT Utilities...\n');
+# Start server
+npm run dev &
+sleep 3
 
-  const payload = {
-    userId: '123e4567-e89b-12d3-a456-426614174000',
-    email: 'test@example.com',
-    tier: 'free',
-  };
+# Test session creation (using curl with cookie jar)
+echo "Testing session creation..."
+curl -c cookies.txt -X POST http://localhost:3000/api/test-session \
+  -H "Content-Type: application/json" \
+  -d '{"test":"data"}'
 
-  // Generate token
-  console.log('1. Generating token...');
-  const token = generateToken(payload);
-  console.log('✓ Token generated:', token.substring(0, 50) + '...');
+# Verify session persists
+curl -b cookies.txt http://localhost:3000/api/test-session
 
-  // Verify token
-  console.log('\n2. Verifying token...');
-  const decoded = verifyToken(token);
-  console.log('✓ Decoded:', decoded);
+# Check Redis for session data
+docker exec mtg-agent-redis redis-cli KEYS "sess:*"
 
-  // Get expiration
-  console.log('\n3. Getting expiration...');
-  const exp = getTokenExpiration(token);
-  console.log('✓ Expires at:', exp);
-
-  // Test invalid token
-  console.log('\n4. Testing invalid token...');
-  try {
-    verifyToken('invalid.token.here');
-    console.log('✗ Should have thrown error');
-  } catch (error: any) {
-    console.log('✓ Invalid token rejected:', error.message);
-  }
-
-  console.log('\n✓ All tests passed!');
-}
-
-test();
-EOF
-
-npx tsx test-jwt.ts
-rm test-jwt.ts
+# Stop server
+kill $(lsof -t -i:3000)
+rm cookies.txt
 ```
 
 ### Success Criteria
 
-- [ ] JWT generation works
-- [ ] JWT verification works
-- [ ] Expired tokens rejected
-- [ ] Invalid tokens rejected
-- [ ] Payload correctly encoded/decoded
-- [ ] Expiration time calculated
+- [ ] express-session installed
+- [ ] connect-redis installed
+- [ ] Session configuration created
+- [ ] Redis client connected
+- [ ] Sessions stored in Redis
+- [ ] Cookie settings secure
+- [ ] TypeScript types extended
 
 ---
 
 ## Task 1.2.3: Authentication Service
 
-**Estimated Time:** 90 minutes
+**Estimated Time:** 60 minutes
 
 ### Objectives
 
-Create authentication service with register and login logic.
+Create authentication service with register and login logic using sessions.
 
 ### Steps
 
@@ -343,8 +343,8 @@ Create authentication service with register and login logic.
 ```typescript
 import { UserModel } from '../models/User';
 import { hashPassword, verifyPassword, validatePasswordStrength, validateEmail } from '../utils/password';
-import { generateToken, JWTPayload } from '../utils/jwt';
 import { User } from '../types/database.types';
+import { Session } from 'express-session';
 
 export interface RegisterInput {
   email: string;
@@ -357,7 +357,6 @@ export interface LoginInput {
 }
 
 export interface AuthResponse {
-  token: string;
   user: {
     id: string;
     email: string;
@@ -368,9 +367,9 @@ export interface AuthResponse {
 
 export class AuthService {
   /**
-   * Register new user
+   * Register new user and create session
    */
-  static async register(input: RegisterInput): Promise<AuthResponse> {
+  static async register(input: RegisterInput, session: Session): Promise<AuthResponse> {
     const { email, password } = input;
 
     // Validate email
@@ -400,15 +399,12 @@ export class AuthService {
       tier: 'free',
     });
 
-    // Generate JWT
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      tier: user.tier,
-    });
+    // Create session
+    session.userId = user.id;
+    session.email = user.email;
+    session.tier = user.tier;
 
     return {
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -419,9 +415,9 @@ export class AuthService {
   }
 
   /**
-   * Login user
+   * Login user and create session
    */
-  static async login(input: LoginInput): Promise<AuthResponse> {
+  static async login(input: LoginInput, session: Session): Promise<AuthResponse> {
     const { email, password } = input;
 
     // Find user
@@ -437,15 +433,12 @@ export class AuthService {
       throw new Error('Invalid email or password');
     }
 
-    // Generate JWT
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      tier: user.tier,
-    });
+    // Create session
+    session.userId = user.id;
+    session.email = user.email;
+    session.tier = user.tier;
 
     return {
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -456,17 +449,28 @@ export class AuthService {
   }
 
   /**
-   * Verify JWT and get user
+   * Logout user (destroy session)
    */
-  static async verifyAuth(token: string): Promise<User> {
-    const { verifyToken } = await import('../utils/jwt');
-    const payload = verifyToken(token);
+  static async logout(session: Session): Promise<void> {
+    return new Promise((resolve, reject) => {
+      session.destroy((err) => {
+        if (err) {
+          reject(new Error('Failed to logout'));
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
 
-    const user = await UserModel.findById(payload.userId);
+  /**
+   * Get user from session
+   */
+  static async getUserFromSession(userId: string): Promise<User> {
+    const user = await UserModel.findById(userId);
     if (!user) {
       throw new Error('User not found');
     }
-
     return user;
   }
 }
@@ -481,18 +485,35 @@ import { AuthService } from './src/services/authService';
 import { UserModel } from './src/models/User';
 import { closePool } from './src/config/database';
 
+// Mock session object
+const createMockSession = () => {
+  const session: any = {
+    userId: undefined,
+    email: undefined,
+    tier: undefined,
+    destroy: (callback: (err?: Error) => void) => {
+      session.userId = undefined;
+      session.email = undefined;
+      session.tier = undefined;
+      callback();
+    },
+  };
+  return session;
+};
+
 async function test() {
   try {
     console.log('Testing Auth Service...\n');
 
     // Test registration
     console.log('1. Testing registration...');
+    const registerSession = createMockSession();
     const registerResult = await AuthService.register({
       email: 'authtest@example.com',
       password: 'SecurePassword123!',
-    });
+    }, registerSession);
     console.log('✓ Registered:', registerResult.user.email);
-    console.log('✓ Token received:', registerResult.token.substring(0, 20) + '...');
+    console.log('✓ Session created:', registerSession.userId ? 'Yes' : 'No');
 
     // Test duplicate registration
     console.log('\n2. Testing duplicate registration...');
@@ -500,7 +521,7 @@ async function test() {
       await AuthService.register({
         email: 'authtest@example.com',
         password: 'AnotherPassword123!',
-      });
+      }, createMockSession());
       console.log('✗ Should have thrown error');
     } catch (error: any) {
       console.log('✓ Duplicate rejected:', error.message);
@@ -512,7 +533,7 @@ async function test() {
       await AuthService.register({
         email: 'weak@example.com',
         password: 'weak',
-      });
+      }, createMockSession());
       console.log('✗ Should have thrown error');
     } catch (error: any) {
       console.log('✓ Weak password rejected');
@@ -520,11 +541,13 @@ async function test() {
 
     // Test login
     console.log('\n4. Testing login...');
+    const loginSession = createMockSession();
     const loginResult = await AuthService.login({
       email: 'authtest@example.com',
       password: 'SecurePassword123!',
-    });
+    }, loginSession);
     console.log('✓ Logged in:', loginResult.user.email);
+    console.log('✓ Session created:', loginSession.userId ? 'Yes' : 'No');
 
     // Test wrong password
     console.log('\n5. Testing wrong password...');
@@ -532,16 +555,21 @@ async function test() {
       await AuthService.login({
         email: 'authtest@example.com',
         password: 'WrongPassword123!',
-      });
+      }, createMockSession());
       console.log('✗ Should have thrown error');
     } catch (error: any) {
       console.log('✓ Wrong password rejected');
     }
 
-    // Test verify auth
-    console.log('\n6. Testing verify auth...');
-    const user = await AuthService.verifyAuth(loginResult.token);
-    console.log('✓ Token verified:', user.email);
+    // Test get user from session
+    console.log('\n6. Testing get user from session...');
+    const user = await AuthService.getUserFromSession(loginSession.userId);
+    console.log('✓ User retrieved:', user.email);
+
+    // Test logout
+    console.log('\n7. Testing logout...');
+    await AuthService.logout(loginSession);
+    console.log('✓ Session destroyed:', loginSession.userId === undefined ? 'Yes' : 'No');
 
     // Cleanup
     await UserModel.delete(registerResult.user.id);
@@ -568,19 +596,19 @@ rm test-auth-service.ts
 - [ ] Weak passwords rejected
 - [ ] Can login with correct credentials
 - [ ] Wrong passwords rejected
-- [ ] JWT tokens generated
-- [ ] Tokens can be verified
-- [ ] User retrieved from token
+- [ ] Sessions created on login/register
+- [ ] User retrieved from session
+- [ ] Logout destroys session
 
 ---
 
 ## Task 1.2.4: Authentication Middleware
 
-**Estimated Time:** 60 minutes
+**Estimated Time:** 45 minutes
 
 ### Objectives
 
-Create Express middleware for protecting routes with JWT authentication.
+Create Express middleware for protecting routes with session-based authentication.
 
 ### Steps
 
@@ -588,7 +616,6 @@ Create Express middleware for protecting routes with JWT authentication.
 
 ```typescript
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../utils/jwt';
 import { UserModel } from '../models/User';
 import { User } from '../types/database.types';
 
@@ -603,7 +630,7 @@ declare global {
 }
 
 /**
- * Require authentication (JWT in Authorization header)
+ * Require authentication (session must exist)
  */
 export async function requireAuth(
   req: Request,
@@ -611,37 +638,24 @@ export async function requireAuth(
   next: NextFunction
 ): Promise<void> {
   try {
-    // Get token from Authorization header
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader) {
+    // Check if session exists and has userId
+    if (!req.session || !req.session.userId) {
       res.status(401).json({
-        error: 'No authorization header',
-        message: 'Please provide an Authorization header with Bearer token',
+        error: 'Not authenticated',
+        message: 'Please login to access this resource',
       });
       return;
     }
-
-    if (!authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        error: 'Invalid authorization format',
-        message: 'Authorization header must be: Bearer <token>',
-      });
-      return;
-    }
-
-    const token = authHeader.substring(7); // Remove "Bearer "
-
-    // Verify token
-    const payload = verifyToken(token);
 
     // Get user from database
-    const user = await UserModel.findById(payload.userId);
+    const user = await UserModel.findById(req.session.userId);
 
     if (!user) {
+      // User was deleted, destroy session
+      req.session.destroy(() => {});
       res.status(401).json({
         error: 'User not found',
-        message: 'Token is valid but user no longer exists',
+        message: 'User no longer exists. Please login again.',
       });
       return;
     }
@@ -652,23 +666,15 @@ export async function requireAuth(
 
     next();
   } catch (error: any) {
-    if (error.message === 'Token expired') {
-      res.status(401).json({
-        error: 'Token expired',
-        message: 'Your session has expired. Please login again.',
-      });
-      return;
-    }
-
-    res.status(403).json({
-      error: 'Invalid token',
-      message: 'Authentication token is invalid',
+    res.status(500).json({
+      error: 'Authentication error',
+      message: 'Failed to verify authentication',
     });
   }
 }
 
 /**
- * Optional authentication (doesn't fail if no token)
+ * Optional authentication (doesn't fail if no session)
  */
 export async function optionalAuth(
   req: Request,
@@ -676,12 +682,8 @@ export async function optionalAuth(
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const payload = verifyToken(token);
-      const user = await UserModel.findById(payload.userId);
+    if (req.session && req.session.userId) {
+      const user = await UserModel.findById(req.session.userId);
 
       if (user) {
         req.user = user;
@@ -739,7 +741,7 @@ export function requireTier(minimumTier: 'free' | 'premium' | 'enterprise') {
 ```bash
 cd backend
 
-# Add test route to src/index.ts
+# Add test routes to src/index.ts
 cat >> src/index.ts << 'EOF'
 
 // Test auth middleware
@@ -768,44 +770,40 @@ EOF
 npm run dev &
 sleep 3
 
-# Test without token
-echo "Testing without token..."
+# Test without session
+echo "Testing without session..."
 curl http://localhost:3000/api/protected
 # Expected: 401 error
 
-# Register and get token
+# Register user (creates session)
 echo -e "\n\nRegistering user..."
-RESPONSE=$(curl -s -X POST http://localhost:3000/api/auth/register \
+curl -c cookies.txt -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"middleware@example.com","password":"SecurePass123!"}')
+  -d '{"email":"middleware@example.com","password":"SecurePass123!"}'
 
-TOKEN=$(echo $RESPONSE | grep -o '"token":"[^"]*' | cut -d'"' -f4)
-echo "Token: ${TOKEN:0:50}..."
-
-# Test with token
-echo -e "\n\nTesting with valid token..."
-curl http://localhost:3000/api/protected \
-  -H "Authorization: Bearer $TOKEN"
+# Test with session cookie
+echo -e "\n\nTesting with valid session..."
+curl -b cookies.txt http://localhost:3000/api/protected
 # Expected: 200 with user data
 
 # Test premium route with free tier
 echo -e "\n\nTesting premium route with free tier..."
-curl http://localhost:3000/api/premium \
-  -H "Authorization: Bearer $TOKEN"
+curl -b cookies.txt http://localhost:3000/api/premium
 # Expected: 403 Insufficient permissions
 
 # Stop server
 kill $(lsof -t -i:3000)
+rm cookies.txt
 ```
 
 ### Success Criteria
 
 - [ ] requireAuth middleware works
-- [ ] Rejects requests without token
-- [ ] Rejects invalid tokens
-- [ ] Rejects expired tokens
+- [ ] Rejects requests without session
+- [ ] Rejects invalid sessions
+- [ ] Destroys session if user deleted
 - [ ] Attaches user to request
-- [ ] optionalAuth doesn't fail without token
+- [ ] optionalAuth doesn't fail without session
 - [ ] requireTier enforces tier levels
 - [ ] Error messages helpful
 
@@ -813,11 +811,11 @@ kill $(lsof -t -i:3000)
 
 ## Task 1.2.5: Auth API Routes
 
-**Estimated Time:** 60 minutes
+**Estimated Time:** 45 minutes
 
 ### Objectives
 
-Create registration and login API endpoints.
+Create registration, login, logout, and user info API endpoints.
 
 ### Steps
 
@@ -826,12 +824,13 @@ Create registration and login API endpoints.
 ```typescript
 import { Router, Request, Response } from 'express';
 import { AuthService } from '../services/authService';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
 /**
  * POST /api/auth/register
- * Register new user
+ * Register new user and create session
  */
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -846,8 +845,8 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Register user
-    const result = await AuthService.register({ email, password });
+    // Register user (creates session automatically)
+    const result = await AuthService.register({ email, password }, req.session);
 
     res.status(201).json(result);
   } catch (error: any) {
@@ -886,7 +885,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
 /**
  * POST /api/auth/login
- * Login user
+ * Login user and create session
  */
 router.post('/login', async (req: Request, res: Response) => {
   try {
@@ -901,8 +900,8 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    // Login user
-    const result = await AuthService.login({ email, password });
+    // Login user (creates session automatically)
+    const result = await AuthService.login({ email, password }, req.session);
 
     res.status(200).json(result);
   } catch (error: any) {
@@ -924,11 +923,30 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/auth/logout
+ * Logout user (destroy session)
+ */
+router.post('/logout', requireAuth, async (req: Request, res: Response) => {
+  try {
+    await AuthService.logout(req.session);
+
+    res.status(200).json({
+      message: 'Logged out successfully',
+    });
+  } catch (error: any) {
+    console.error('Logout error:', error);
+
+    res.status(500).json({
+      error: 'Logout failed',
+      message: 'An error occurred during logout',
+    });
+  }
+});
+
+/**
  * GET /api/auth/me
  * Get current user (requires authentication)
  */
-import { requireAuth } from '../middleware/auth';
-
 router.get('/me', requireAuth, async (req: Request, res: Response) => {
   res.json({
     user: {
@@ -950,23 +968,25 @@ export default router;
 // Add after other imports
 import authRoutes from './routes/auth';
 
-// Add after middleware setup
+// Add after middleware setup (but after session middleware!)
 app.use('/api/auth', authRoutes);
 ```
 
 ### Verification
 
 ```bash
+cd backend
+
 # Start server
 npm run dev &
 sleep 3
 
 # Test registration
 echo "1. Testing registration..."
-curl -X POST http://localhost:3000/api/auth/register \
+curl -c cookies.txt -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"routes@example.com","password":"SecurePass123!"}'
-# Expected: 201 with token and user data
+# Expected: 201 with user data and session cookie
 
 # Test duplicate registration
 echo -e "\n\n2. Testing duplicate registration..."
@@ -975,34 +995,49 @@ curl -X POST http://localhost:3000/api/auth/register \
   -d '{"email":"routes@example.com","password":"AnotherPass123!"}'
 # Expected: 409 Email already registered
 
+# Test /me endpoint with session
+echo -e "\n\n3. Testing /me endpoint with session..."
+curl -b cookies.txt http://localhost:3000/api/auth/me
+# Expected: 200 with user data
+
+# Test logout
+echo -e "\n\n4. Testing logout..."
+curl -b cookies.txt -c cookies.txt -X POST http://localhost:3000/api/auth/logout
+# Expected: 200 logout successful
+
+# Test /me after logout (should fail)
+echo -e "\n\n5. Testing /me after logout..."
+curl -b cookies.txt http://localhost:3000/api/auth/me
+# Expected: 401 not authenticated
+
 # Test login
-echo -e "\n\n3. Testing login..."
-RESPONSE=$(curl -s -X POST http://localhost:3000/api/auth/login \
+echo -e "\n\n6. Testing login..."
+curl -c cookies.txt -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"routes@example.com","password":"SecurePass123!"}')
-echo $RESPONSE
+  -d '{"email":"routes@example.com","password":"SecurePass123!"}'
+# Expected: 200 with user data and new session
 
-TOKEN=$(echo $RESPONSE | grep -o '"token":"[^"]*' | cut -d'"' -f4)
-
-# Test /me endpoint
-echo -e "\n\n4. Testing /me endpoint..."
-curl http://localhost:3000/api/auth/me \
-  -H "Authorization: Bearer $TOKEN"
+# Test /me after login
+echo -e "\n\n7. Testing /me after login..."
+curl -b cookies.txt http://localhost:3000/api/auth/me
 # Expected: 200 with user data
 
 # Stop server
 kill $(lsof -t -i:3000)
+rm cookies.txt
 ```
 
 ### Success Criteria
 
 - [ ] POST /api/auth/register works
 - [ ] POST /api/auth/login works
+- [ ] POST /api/auth/logout works
 - [ ] GET /api/auth/me works
 - [ ] Input validation working
 - [ ] Error responses appropriate
 - [ ] Status codes correct
-- [ ] Returns JWT tokens
+- [ ] Session cookies set correctly
+- [ ] Logout destroys session immediately
 
 ---
 
@@ -1014,34 +1049,39 @@ kill $(lsof -t -i:3000)
 - [ ] Weak passwords rejected
 - [ ] Email validation working
 
-### JWT Tokens
-- [ ] Token generation works
-- [ ] Token verification works
-- [ ] Tokens expire correctly
-- [ ] Invalid tokens rejected
-- [ ] Secret is secure (64+ chars)
+### Session Management
+- [ ] Redis session store configured
+- [ ] Session cookies secure (HttpOnly, Secure, SameSite)
+- [ ] Sessions expire correctly (7 days max, 30 min idle)
+- [ ] Session data properly typed
+- [ ] Sessions stored in Redis with prefix
 
 ### Authentication Service
-- [ ] Registration working
-- [ ] Login working
+- [ ] Registration working with session creation
+- [ ] Login working with session creation
+- [ ] Logout destroys session immediately
 - [ ] Duplicate emails prevented
 - [ ] Password verification correct
-- [ ] Tokens generated correctly
+- [ ] User retrieval from session works
 
 ### Middleware
-- [ ] requireAuth works
+- [ ] requireAuth works with sessions
 - [ ] optionalAuth works
 - [ ] requireTier works
 - [ ] User attached to request
+- [ ] Session validated on each request
+- [ ] Deleted users handled gracefully
 - [ ] Error handling proper
 
 ### API Routes
 - [ ] POST /api/auth/register
 - [ ] POST /api/auth/login
+- [ ] POST /api/auth/logout
 - [ ] GET /api/auth/me
 - [ ] Input validation
 - [ ] Error responses
 - [ ] Status codes correct
+- [ ] Session cookies set properly
 
 ## Common Issues
 
@@ -1055,7 +1095,36 @@ BCRYPT_ROUNDS=10
 # Production should use 12+
 ```
 
-### Issue: JWT_SECRET error
+### Issue: Session not persisting
+
+**Solution:**
+```bash
+# Verify Redis is running
+docker ps | grep redis
+
+# Check Redis connection
+docker exec mtg-agent-redis redis-cli PING
+# Should return: PONG
+
+# Check sessions in Redis
+docker exec mtg-agent-redis redis-cli KEYS "sess:*"
+
+# Verify session middleware is before routes
+# Session middleware must be added BEFORE route definitions
+```
+
+### Issue: CORS blocking cookies
+
+**Solution:**
+```typescript
+// In backend/src/index.ts
+app.use(cors({
+  origin: 'http://localhost:3001', // Frontend URL
+  credentials: true, // CRITICAL for cookies
+}));
+```
+
+### Issue: Session secret not set
 
 **Solution:**
 ```bash
@@ -1063,16 +1132,18 @@ BCRYPT_ROUNDS=10
 openssl rand -hex 32
 
 # Add to .env
-JWT_SECRET=<generated_secret>
+SESSION_SECRET=<generated_secret>
 ```
 
 ## Security Notes
 
 - **Never log passwords** - not even hashed ones
-- **Use HTTPS in production** - tokens sent in headers
-- **Rotate JWT_SECRET** if compromised
+- **Use HTTPS in production** - cookies require secure flag
+- **Rotate SESSION_SECRET** if compromised (invalidates all sessions)
 - **Rate limit auth endpoints** (Phase 1.3)
 - **Consider email verification** (Phase 4)
+- **Set SameSite=strict in production** for CSRF protection
+- **Monitor active sessions** in Redis for suspicious activity
 
 ## Rollback Procedure
 
@@ -1082,9 +1153,10 @@ JWT_SECRET=<generated_secret>
 rm backend/src/routes/auth.ts
 rm backend/src/services/authService.ts
 rm backend/src/middleware/auth.ts
-rm backend/src/utils/jwt.ts
+rm backend/src/config/session.ts
 rm backend/src/utils/password.ts
 
+# Remove session middleware from index.ts
 # Restart server
 ```
 
@@ -1092,11 +1164,14 @@ rm backend/src/utils/password.ts
 
 1. ✅ Verify all checklist items
 2. ✅ Test all endpoints manually
-3. ✅ Commit: `feat(auth): complete Phase 1.2 - authentication`
-4. ➡️ Proceed to [Phase 1.3: Rate Limiting](PHASE_1.3_RATE_LIMITING.md)
+3. ✅ Check Redis for session data
+4. ✅ Test logout functionality
+5. ✅ Commit: `feat(auth): complete Phase 1.2 - session-based authentication`
+6. ➡️ Proceed to [Phase 1.3: Rate Limiting](PHASE_1.3_RATE_LIMITING.md)
 
 ---
 
 **Status:** ⏸️ Not Started
-**Last Updated:** 2025-11-01
+**Last Updated:** 2025-11-05
+**Implementation:** Server-side sessions with Redis
 **Next Phase:** [Phase 1.3: Rate Limiting & Cost Controls](PHASE_1.3_RATE_LIMITING.md)

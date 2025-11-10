@@ -43,7 +43,6 @@ railway add --database redis
 4. Set environment variables:
 ```bash
 railway variables set ANTHROPIC_API_KEY=sk-ant-...
-railway variables set JWT_SECRET=$(openssl rand -hex 32)
 railway variables set SESSION_SECRET=$(openssl rand -hex 32)
 railway variables set FRONTEND_URL=https://yourdomain.com
 ```
@@ -182,8 +181,7 @@ REDIS_URL=redis://host:6379
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-api-key-here
 
-# Secrets (generate with: openssl rand -hex 32)
-JWT_SECRET=your-random-jwt-secret
+# Session secret (generate with: openssl rand -hex 32)
 SESSION_SECRET=your-random-session-secret
 
 # OAuth (if using)
@@ -208,7 +206,7 @@ ENABLE_OAUTH=true
 ### Generating Secrets
 
 ```bash
-# Generate JWT secret
+# Generate SESSION_SECRET
 openssl rand -hex 32
 
 # Generate session secret

@@ -84,26 +84,29 @@ PostgreSQL schema, migrations, and user management with type-safe operations.
 ---
 
 ### Phase 1.2: Authentication & Authorization
-**Time Estimate:** 8-10 hours
+**Time Estimate:** 6-7 hours
 **Status:** ⏸️ Not Started
 **[View Details](PHASE_1.2_AUTH.md)**
 
-JWT-based authentication with bcrypt password hashing and tier-based authorization.
+Session-based authentication with Redis, bcrypt password hashing, and tier-based authorization.
+
+**Architectural Decision:** Using server-side sessions with Redis for immediate user revocation and cost control.
 
 **Key Deliverables:**
 - User registration with validation
-- Login with JWT generation
-- Anonymous session support
-- Auth middleware for protected routes
+- Login with session creation
+- Logout with immediate session destruction
+- Auth middleware for protected routes (requireAuth, optionalAuth, requireTier)
 - Password strength requirements
 - User tier system (anonymous, free, premium)
 
 **Verification:**
 - Can register new users
-- Can login and receive JWT
-- Protected routes reject invalid tokens
-- Anonymous sessions work
+- Can login and create session
+- Can logout and destroy session
+- Protected routes reject requests without session
 - Passwords hashed with bcrypt
+- Sessions stored in Redis
 
 ---
 
@@ -257,7 +260,8 @@ Comprehensive testing of the complete system including security, performance, an
   "pg": "^8.11.0",
   "ioredis": "^5.3.0",
   "bcrypt": "^5.1.0",
-  "jsonwebtoken": "^9.0.0",
+  "express-session": "^1.17.3",
+  "connect-redis": "^7.1.0",
   "zod": "^3.22.0",
   "helmet": "^7.1.0",
   "cors": "^2.8.5",
@@ -269,34 +273,13 @@ Comprehensive testing of the complete system including security, performance, an
 
 ## Architecture Decisions
 
-### Decision 1: JWT vs Session-Based Auth
-**Context:** Need to decide between JWTs stored client-side vs server-side sessions
-
-**Options Considered:**
-- **Option A (JWT):** Client stores token, server validates signature
-  - Pros: Stateless, scales horizontally, simple
-  - Cons: Cannot revoke until expiry, larger payload
-
-- **Option B (Sessions):** Server stores session in Redis
-  - Pros: Can revoke immediately, smaller cookies
-  - Cons: Server state, Redis dependency
-
-- **Option C (Hybrid):** Short-lived JWTs + refresh tokens in Redis
-  - Pros: Best of both worlds
-  - Cons: More complex
-
-**Decision:** Option A (JWT) with 7-day expiry
+### Decision 1: Authentication Method
+**Decision:** Server-side sessions with Redis
 
 **Rationale:**
-- MVP doesn't need immediate revocation
-- Simpler to implement and test
-- Can add refresh tokens in Phase 4 if needed
-- Redis already used for rate limiting
-
-**Consequences:**
-- Cannot revoke tokens immediately (wait for expiry)
-- Need to keep JWT_SECRET secure
-- Can upgrade to hybrid in Phase 4
+- Immediate user revocation for cost control
+- Redis infrastructure already available
+- Simple security model for MVP
 
 ---
 
@@ -356,7 +339,7 @@ Phase 1 is complete when ALL of the following are true:
 
 ### Functional Requirements
 - [ ] Can register new user accounts
-- [ ] Can login and receive JWT
+- [ ] Can login and create session
 - [ ] Can chat about MTG rules and strategies
 - [ ] Anonymous users can try 3 messages
 - [ ] Rate limits prevent abuse
@@ -382,7 +365,7 @@ Phase 1 is complete when ALL of the following are true:
 ### Security Requirements
 - [ ] API keys never exposed to client
 - [ ] Passwords hashed with bcrypt (cost 12+)
-- [ ] JWT secrets are randomized
+- [ ] Session secrets are randomized
 - [ ] Input validation on all endpoints
 - [ ] Output sanitization working
 - [ ] CORS configured correctly
@@ -483,7 +466,7 @@ Phase 1 is complete when ALL of the following are true:
 **Coverage Target:** 70%+ (focusing on critical paths)
 **Tools:** Jest, ts-jest
 **Focus Areas:**
-- Authentication logic (JWT generation, password hashing)
+- Authentication logic (session management, password hashing)
 - Rate limiting calculations
 - Cost estimation functions
 - Input validation schemas (Zod)
@@ -498,10 +481,10 @@ describe('Auth Service', () => {
     expect(await verifyPassword(password, hash)).toBe(true);
   });
 
-  it('should generate valid JWTs', () => {
-    const token = generateJWT({ userId: '123', tier: 'free' });
-    const decoded = verifyJWT(token);
-    expect(decoded.userId).toBe('123');
+  it('should create valid sessions', async () => {
+    const mockSession = { userId: undefined, tier: undefined };
+    await createSession(mockSession, { userId: '123', tier: 'free' });
+    expect(mockSession.userId).toBe('123');
   });
 });
 ```
@@ -517,7 +500,7 @@ describe('Auth Service', () => {
 **Example Tests:**
 ```typescript
 describe('POST /api/auth/register', () => {
-  it('should create user and return JWT', async () => {
+  it('should create user and initialize session', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({ email: 'test@example.com', password: 'SecurePass123!' });
@@ -545,7 +528,7 @@ describe('POST /api/auth/register', () => {
 - [ ] API keys not in browser DevTools
 - [ ] API keys not in Git history (`git log --all -S "sk-ant-"`)
 - [ ] Passwords not stored in plaintext
-- [ ] JWT cannot be forged
+- [ ] Sessions cannot be forged
 - [ ] Rate limits cannot be bypassed
 - [ ] SQL injection attempts fail
 - [ ] XSS attempts sanitized
@@ -694,7 +677,7 @@ app.use('/api/chat', rateLimitMiddleware, chatHandler);
 - [ ] Dependencies up to date
 - [ ] No known vulnerabilities (`npm audit`)
 - [ ] Passwords hashed with bcrypt
-- [ ] JWTs use secure secrets
+- [ ] Sessions use secure secrets
 
 ### Deployment
 - [ ] `docker-compose up` works on fresh checkout

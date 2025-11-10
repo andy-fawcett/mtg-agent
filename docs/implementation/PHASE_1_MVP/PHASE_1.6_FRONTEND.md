@@ -17,6 +17,14 @@ Build a responsive web interface for the MTG Agent chat application.
 - Error handling and loading states
 - Responsive design (mobile + desktop)
 
+## Authentication Note
+
+**IMPORTANT:** The backend uses **session-based authentication with cookies**. This means:
+- No need to store tokens in localStorage
+- API requests must include `credentials: 'include'` to send session cookies
+- Backend CORS must have `credentials: true` enabled
+- Simpler frontend auth logic (cookies handled automatically by browser)
+
 ---
 
 ## Task 1.6.1: Next.js Project Setup
@@ -95,15 +103,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-});
-
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true, // CRITICAL: Send cookies with requests for session-based auth
 });
 
 // Handle errors globally
@@ -111,9 +111,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired, clear it
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Session expired or not authenticated
+      // Redirect to login (but not if already on login/register pages)
+      if (!['/login', '/register'].includes(window.location.pathname)) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

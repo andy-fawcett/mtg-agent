@@ -76,7 +76,7 @@ Phase-by-phase implementation guides with specific tasks, code examples, and ver
 | [Security Architecture](reference/SECURITY_ARCHITECTURE.md) | Threat model, attack vectors, security layers | Before starting development |
 | [API Security](reference/API_SECURITY.md) | API key management, backend proxy pattern | When setting up Claude API integration |
 | [Rate Limiting](reference/RATE_LIMITING.md) | Multi-tier rate limiting strategy | When implementing cost controls |
-| [Authentication](reference/AUTHENTICATION.md) | Auth strategies (JWT, OAuth, session-based) | When designing user management |
+| [Authentication](reference/AUTHENTICATION.md) | Auth strategies (sessions, OAuth) | When designing user management |
 | [Agent SDK Security](reference/AGENT_SDK_SECURITY.md) | System prompts, jailbreak prevention | When integrating Claude Agent SDK |
 | [Security Checklist](reference/SECURITY_CHECKLIST.md) | Pre-deployment security audit | Before going to production |
 
@@ -122,7 +122,7 @@ Phase 1 is fully documented with step-by-step implementation tasks:
 |-----------|----------|---------------|------------------|
 | **1.0 Foundation** | [PHASE_1.0_FOUNDATION.md](implementation/PHASE_1_MVP/PHASE_1.0_FOUNDATION.md) | 4-5 hours | Project structure, TypeScript, Docker, Express |
 | **1.1 Database** | [PHASE_1.1_DATABASE.md](implementation/PHASE_1_MVP/PHASE_1.1_DATABASE.md) | 4-5 hours | PostgreSQL, migrations, models |
-| **1.2 Auth** | [PHASE_1.2_AUTH.md](implementation/PHASE_1_MVP/PHASE_1.2_AUTH.md) | 5-6 hours | JWT, bcrypt, registration, login |
+| **1.2 Auth** | [PHASE_1.2_AUTH.md](implementation/PHASE_1_MVP/PHASE_1.2_AUTH.md) | 5-6 hours | Sessions, bcrypt, registration, login |
 | **1.3 Rate Limiting** | [PHASE_1.3_RATE_LIMITING.md](implementation/PHASE_1_MVP/PHASE_1.3_RATE_LIMITING.md) | 3-4 hours | Redis rate limiting, budget controls |
 | **1.4 Claude SDK** | [PHASE_1.4_CLAUDE_SDK.md](implementation/PHASE_1_MVP/PHASE_1.4_CLAUDE_SDK.md) | 3-4 hours | Anthropic SDK, system prompts |
 | **1.5 API** | [PHASE_1.5_API.md](implementation/PHASE_1_MVP/PHASE_1.5_API.md) | 4-5 hours | Zod validation, chat endpoint |

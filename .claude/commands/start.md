@@ -130,7 +130,7 @@ Show the user:
 **CRITICAL: Before making any of these decisions, STOP and use AskUserQuestion:**
 
 1. **Architecture Decisions**
-   - Example: "Should we use JWT or session-based auth?"
+   - Example: "Should we use PostgreSQL or MongoDB for this feature?"
    - Example: "Monolith vs microservices for this component?"
    - Example: "Which database migration tool should we use?"
 

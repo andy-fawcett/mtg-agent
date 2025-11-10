@@ -73,7 +73,7 @@ Supporting Services:
 
 **Security Stack:**
 - bcrypt (password hashing, cost 12+)
-- jsonwebtoken (JWT auth)
+- express-session + connect-redis (session-based auth)
 - helmet (security headers)
 - Zod (input validation)
 - rate-limiter-flexible (Redis-backed rate limiting)
@@ -104,9 +104,11 @@ Supporting Services:
 
 4. **Authentication**
    - ✅ ALWAYS hash passwords with bcrypt (cost 12+)
-   - ✅ ALWAYS use strong JWT secrets (64+ characters)
-   - ✅ ALWAYS validate JWTs on protected routes
+   - ✅ ALWAYS use strong SESSION_SECRET (32+ characters)
+   - ✅ ALWAYS validate sessions on protected routes
+   - ✅ ALWAYS use HttpOnly, Secure, SameSite cookies
    - ❌ NEVER store passwords in plaintext
+   - ✅ ALWAYS use session-based auth (express-session + connect-redis)
 
 5. **Jailbreak Prevention**
    - ✅ ALWAYS hardcode system prompts server-side
@@ -156,7 +158,7 @@ const requiredEnvVars = [
   'DATABASE_URL',
   'REDIS_URL',
   'ANTHROPIC_API_KEY',
-  'JWT_SECRET',
+  'SESSION_SECRET',
 ];
 
 for (const envVar of requiredEnvVars) {
@@ -237,9 +239,9 @@ app.post('/api/chat', async (req, res) => {
 **Detection:** Check for `package-lock.json` instead of `pnpm-lock.yaml`
 **Fix:** Delete `package-lock.json` and `node_modules`, run `pnpm install`
 
-### 3. Weak JWT Secrets
-**Pitfall:** Using short or predictable JWT secrets
-**Detection:** Check `JWT_SECRET` length: `echo $JWT_SECRET | wc -c`
+### 3. Weak Session Secrets
+**Pitfall:** Using short or predictable session secrets
+**Detection:** Check `SESSION_SECRET` length: `echo $SESSION_SECRET | wc -c`
 **Fix:** Generate with `openssl rand -hex 32`
 
 ### 4. Missing Rate Limits
@@ -267,9 +269,9 @@ app.post('/api/chat', async (req, res) => {
 **Verification:** Can create users, query users, indexes exist
 
 ### Phase 1.2 (Authentication)
-**Focus:** JWT auth, bcrypt, registration/login
+**Focus:** Session-based auth, bcrypt, registration/login
 **Key Files:** `backend/src/services/auth.ts`, `backend/src/middleware/auth.ts`
-**Verification:** Registration works, login returns JWT, protected routes enforce auth
+**Verification:** Registration works, login creates session, protected routes enforce auth
 
 ### Phase 1.3 (Rate Limiting)
 **Focus:** Redis rate limiting, budget tracking

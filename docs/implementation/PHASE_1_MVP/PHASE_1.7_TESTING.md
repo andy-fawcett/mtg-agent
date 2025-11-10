@@ -77,7 +77,7 @@ afterAll(async () => {
 
 // Set test environment variables
 process.env.NODE_ENV = 'test';
-process.env.JWT_SECRET = 'test-secret-key-12345';
+process.env.SESSION_SECRET = 'test-secret-key-12345';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/mtg_agent_test';
 ```
 
@@ -105,7 +105,7 @@ describe('Auth Integration Tests', () => {
         });
 
       expect(response.status).toBe(201);
-      expect(response.body).toHaveProperty('token');
+      expect(response.headers['set-cookie']).toBeDefined(); // Session cookie set
       expect(response.body.user.email).toBe('newuser@test.example.com');
       expect(response.body.user).not.toHaveProperty('password_hash');
     });
@@ -171,7 +171,7 @@ describe('Auth Integration Tests', () => {
         .send(testUser);
 
       expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('token');
+      expect(response.headers['set-cookie']).toBeDefined(); // Session cookie set
       expect(response.body.user.email).toBe(testUser.email);
     });
 
@@ -199,7 +199,7 @@ describe('Auth Integration Tests', () => {
   });
 
   describe('GET /api/auth/me', () => {
-    it('should return user data with valid token', async () => {
+    it('should return user data with valid session', async () => {
       // Register and login
       const loginResponse = await request(app)
         .post('/api/auth/register')
@@ -208,19 +208,19 @@ describe('Auth Integration Tests', () => {
           password: 'SecurePass123!',
         });
 
-      const token = loginResponse.body.token;
+      const cookies = loginResponse.headers['set-cookie'];
 
-      // Get user data
+      // Get user data with session cookie
       const response = await request(app)
         .get('/api/auth/me')
-        .set('Authorization', `Bearer ${token}`);
+        .set('Cookie', cookies);
 
       expect(response.status).toBe(200);
-      expect(response.body.email).toBe('metest@test.example.com');
-      expect(response.body).not.toHaveProperty('password_hash');
+      expect(response.body.user.email).toBe('metest@test.example.com');
+      expect(response.body.user).not.toHaveProperty('password_hash');
     });
 
-    it('should reject request without token', async () => {
+    it('should reject request without session', async () => {
       const response = await request(app).get('/api/auth/me');
 
       expect(response.status).toBe(401);
@@ -1402,7 +1402,7 @@ pnpm test
 - **Database**: PostgreSQL 15
 - **Cache**: Redis 7
 - **AI**: Anthropic Claude API
-- **Auth**: JWT with bcrypt
+- **Auth**: Sessions with bcrypt
 
 ## API Endpoints
 

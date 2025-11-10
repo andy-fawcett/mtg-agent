@@ -16,7 +16,7 @@ One-page security cheat sheet for MTG Agent development. Print and keep handy!
 | 6 | **Parameterize SQL queries** | String concat = SQL injection | Use `$1`, `$2` parameters |
 | 7 | **Sanitize outputs** | Prevents XSS | Strip HTML, escape special chars |
 | 8 | **Rate limit everything** | Prevents abuse and cost spirals | Redis + rate-limiter-flexible |
-| 9 | **Strong JWT secrets** | Short secrets = easy to crack | 64+ characters, `openssl rand -hex 32` |
+| 9 | **Strong session secrets** | Short secrets = easy to crack | 64+ characters, `openssl rand -hex 32` |
 | 10 | **Generic error messages in production** | Detailed errors = information leakage | `NODE_ENV === 'production'` check |
 
 ---
@@ -168,7 +168,7 @@ app.use((err, req, res, next) => {
 ├─────────────────────────────────────┤
 │ Layer 3: API & Backend Security    │ Input validation, output sanitization
 ├─────────────────────────────────────┤
-│ Layer 2: Authentication            │ JWT, bcrypt, session management
+│ Layer 2: Authentication            │ Sessions (Redis), bcrypt
 ├─────────────────────────────────────┤
 │ Layer 1: Network & Transport       │ HTTPS, CORS, DDoS protection
 └─────────────────────────────────────┘
@@ -293,7 +293,7 @@ curl -X POST http://localhost:3000/api/chat \
 
 ### Phase 1.2 (Auth)
 - [ ] Passwords hashed (bcrypt 12+)
-- [ ] JWT secrets strong (64+ chars)
+- [ ] Session secrets strong (64+ chars)
 - [ ] No plaintext passwords
 
 ### Phase 1.3 (Rate Limiting)

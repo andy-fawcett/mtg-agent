@@ -103,7 +103,8 @@ The following packages are used throughout the project implementation:
 | pg | ✅ Safe | No compromised dependencies |
 | ioredis | ⚠️ Indirect | May depend on `debug` |
 | bcrypt | ✅ Safe | No compromised dependencies |
-| jsonwebtoken | ✅ Safe | No compromised dependencies |
+| express-session | ✅ Safe | No compromised dependencies |
+| connect-redis | ✅ Safe | No compromised dependencies |
 | zod | ✅ Safe | No compromised dependencies |
 | rate-limiter-flexible | ✅ Safe | No compromised dependencies |
 | typescript | ⚠️ Indirect | May depend on `chalk` for CLI output |
@@ -402,13 +403,13 @@ pnpm audit || echo "No packages installed yet"
 pnpm install express cors helmet dotenv
 pnpm install @anthropic-ai/sdk
 pnpm install pg ioredis
-pnpm install bcrypt jsonwebtoken
+pnpm install bcrypt express-session connect-redis
 pnpm install zod rate-limiter-flexible
 
 # Install TypeScript tooling
 pnpm install typescript tsx @types/node
 pnpm install @types/express @types/cors
-pnpm install @types/bcrypt @types/jsonwebtoken
+pnpm install @types/bcrypt @types/express-session
 
 # Dev dependencies
 pnpm install -D nodemon @types/pg
@@ -552,7 +553,7 @@ env | grep -E "(KEY|SECRET|TOKEN|PASSWORD)"
 # Rotate immediately:
 # - Anthropic API keys
 # - Database passwords
-# - JWT secrets
+# - Session secrets
 # - GitHub tokens
 # - AWS keys
 # - Any other secrets

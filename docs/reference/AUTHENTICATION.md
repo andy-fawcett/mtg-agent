@@ -4,9 +4,11 @@
 
 This document outlines authentication and authorization strategies for the MTG Agent application, balancing security with user experience.
 
+**Current Implementation:** Phase 1.2 uses session-based authentication with express-session + connect-redis for immediate user revocation and cost control.
+
 ## Authentication Strategies
 
-### Option 1: OAuth 2.0 (Recommended)
+### Option 1: OAuth 2.0 (Recommended for Future)
 
 **Pros:**
 - No password management required
@@ -46,17 +48,9 @@ export default NextAuth({
   ],
 
   callbacks: {
-    async jwt({ token, user, account }) {
-      if (user) {
-        token.userId = user.id;
-        token.tier = user.tier || 'free';
-      }
-      return token;
-    },
-
-    async session({ session, token }) {
-      session.userId = token.userId;
-      session.tier = token.tier;
+    async session({ session, token, user }) {
+      session.userId = user.id;
+      session.tier = user.tier;
       return session;
     },
 
@@ -74,11 +68,6 @@ export default NextAuth({
     },
   },
 
-  session: {
-    strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60,  // 30 days
-  },
-
   pages: {
     signIn: '/auth/signin',
     error: '/auth/error',
@@ -86,7 +75,7 @@ export default NextAuth({
 });
 ```
 
-### Option 2: Email/Password
+### Option 2: Email/Password ✅ CURRENT IMPLEMENTATION
 
 **Pros:**
 - Full control over authentication
@@ -97,13 +86,11 @@ export default NextAuth({
 - Must handle password storage securely
 - Password reset flows required
 - More security responsibility
-- Users may have weak passwords
 
-**Implementation (Express + bcrypt + JWT):**
+**Implementation - Server-side Sessions:**
 
 ```javascript
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 
 // Registration
 app.post('/api/auth/register', async (req, res) => {
@@ -139,14 +126,11 @@ app.post('/api/auth/register', async (req, res) => {
     createdAt: new Date(),
   });
 
-  // Generate JWT
-  const token = jwt.sign(
-    { userId: user.id, tier: user.tier },
-    process.env.JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+  // Create session
+  req.session.userId = user.id;
+  req.session.tier = user.tier;
 
-  res.json({ token, user: { id: user.id, email: user.email, tier: user.tier } });
+  res.json({ user: { id: user.id, email: user.email, tier: user.tier } });
 });
 
 // Login
@@ -167,14 +151,11 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  // Generate JWT
-  const token = jwt.sign(
-    { userId: user.id, tier: user.tier },
-    process.env.JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+  // Create session
+  req.session.userId = user.id;
+  req.session.tier = user.tier;
 
-  res.json({ token, user: { id: user.id, email: user.email, tier: user.tier } });
+  res.json({ user: { id: user.id, email: user.email, tier: user.tier } });
 });
 ```
 
@@ -226,65 +207,17 @@ app.post('/api/auth/upgrade', async (req, res) => {
   // Clear anonymous session
   await redis.del(`anon_session:${sessionId}`);
 
-  // Return authenticated token
-  const token = generateJWT(user);
-  res.json({ token, user });
+  // Create authenticated session
+  req.session.userId = user.id;
+  req.session.tier = user.tier;
+
+  res.json({ user });
 });
 ```
 
 ## Session Management
 
-### JWT-based Sessions
-
-**Storage:**
-```javascript
-// Client-side (localStorage or secure cookie)
-localStorage.setItem('auth_token', token);
-
-// With fetch
-fetch('/api/chat', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
-  },
-  body: JSON.stringify({ message })
-});
-```
-
-**Verification Middleware:**
-```javascript
-const jwt = require('jsonwebtoken');
-
-async function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Load user from database
-    const user = await db.users.findById(decoded.userId);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
-    // Attach to request
-    req.user = user;
-    next();
-  } catch (error) {
-    return res.status(403).json({ error: 'Invalid token' });
-  }
-}
-
-app.use('/api/chat', authenticateToken);
-```
-
-### Server-side Sessions
+### Server-side Sessions ✅ CURRENT IMPLEMENTATION
 
 **Using express-session + Redis:**
 
@@ -328,7 +261,24 @@ function requireAuth(req, res, next) {
   }
   next();
 }
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
+});
 ```
+
+**Session Benefits:**
+- ✅ Immediate revocation - Can ban users instantly
+- ✅ True logout - Session destroyed completely
+- ✅ Active session tracking - See all logged-in users
+- ✅ Cost control - Stop API spending immediately
 
 ## Authorization (User Tiers)
 
@@ -467,50 +417,17 @@ async function clearFailedLogins(email) {
 }
 ```
 
-### Token Refresh
+### Session Extension
+
+> **Note:** Session-based auth extends automatically on each request with `rolling: true` in session config.
 
 ```javascript
-// Generate both access and refresh tokens
-function generateTokens(user) {
-  const accessToken = jwt.sign(
-    { userId: user.id, tier: user.tier },
-    process.env.JWT_SECRET,
-    { expiresIn: '15m' }  // Short-lived
-  );
-
-  const refreshToken = jwt.sign(
-    { userId: user.id, type: 'refresh' },
-    process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: '7d' }  // Long-lived
-  );
-
-  return { accessToken, refreshToken };
-}
-
-// Refresh endpoint
-app.post('/api/auth/refresh', async (req, res) => {
-  const { refreshToken } = req.body;
-
-  try {
-    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-
-    if (decoded.type !== 'refresh') {
-      throw new Error('Invalid token type');
-    }
-
-    const user = await db.users.findById(decoded.userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // Generate new tokens
-    const tokens = generateTokens(user);
-
-    res.json(tokens);
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid refresh token' });
-  }
-});
+// Enable rolling sessions
+app.use(session({
+  // ... other config ...
+  rolling: true,  // Reset maxAge on every request
+  resave: false,
+}));
 ```
 
 ## CAPTCHA Integration
@@ -602,33 +519,31 @@ app.get('/api/auth/verify', async (req, res) => {
 
 ## Recommended Architecture
 
-**For MVP:**
-1. OAuth with Google/GitHub (NextAuth.js)
+**For MVP (Phase 1.2):**
+1. Email/password with server-side sessions
 2. Anonymous tier with strict limits
-3. JWT sessions
-4. CAPTCHA for anonymous users
-
-**For Production:**
-1. OAuth + email/password options
-2. Server-side sessions with Redis
-3. Email verification required
+3. CAPTCHA for anonymous users
 4. Account lockout after failed attempts
-5. Token refresh mechanism
-6. Admin panel for user management
+
+**For Future Phases:**
+1. OAuth + email/password options
+2. Email verification required
+3. Admin panel for user management
+4. API keys for programmatic access (Phase 5+)
 
 ## Implementation Checklist
 
 ### Basic Auth
-- [ ] OAuth providers configured
 - [ ] User database schema created
-- [ ] Session management implemented
+- [ ] Session management with Redis implemented
+- [ ] Registration endpoint working
 - [ ] Login/logout endpoints working
 - [ ] Authentication middleware created
 
 ### Security
-- [ ] Passwords hashed with bcrypt (if using)
+- [ ] Passwords hashed with bcrypt (cost 12+)
 - [ ] HTTPS enforced
-- [ ] Secure session cookies
+- [ ] Secure session cookies (httpOnly, secure, sameSite)
 - [ ] CSRF protection enabled
 - [ ] Rate limiting on auth endpoints
 
@@ -636,16 +551,16 @@ app.get('/api/auth/verify', async (req, res) => {
 - [ ] User tiers implemented
 - [ ] Feature access controls
 - [ ] Account lockout mechanism
-- [ ] Email verification (if email/password)
-- [ ] Password reset flow (if email/password)
+- [ ] Email verification (optional for MVP)
+- [ ] Password reset flow (optional for MVP)
 
 ### Testing
 - [ ] Auth flow tested
-- [ ] Token expiration tested
+- [ ] Session expiration tested
 - [ ] Account lockout tested
 - [ ] Feature access tested per tier
 - [ ] Session security tested
 
 ## Conclusion
 
-Start with OAuth for simplicity and security, add anonymous tier for low-friction onboarding, and implement robust session management. The tier system allows for natural upgrade paths as users find value in the service.
+Phase 1.2 implements email/password authentication with server-side sessions for immediate user control and cost management. Future phases can add OAuth providers and additional features as needed.

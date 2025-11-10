@@ -221,13 +221,13 @@ Follow conventional commits:
 
 **Examples:**
 ```
-feat(auth): add JWT authentication middleware
+feat(auth): add session-based authentication middleware
 
-Implement JWT-based authentication with bcrypt password hashing.
-Includes middleware for protected routes and token validation.
+Implement session-based authentication with bcrypt password hashing.
+Includes middleware for protected routes and session validation.
 
 - Add bcrypt password hashing
-- Create JWT generation utility
+- Create session middleware with Redis store
 - Implement auth middleware
 - Add tests for auth flow
 

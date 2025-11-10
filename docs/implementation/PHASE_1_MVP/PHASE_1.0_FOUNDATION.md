@@ -150,7 +150,7 @@ pnpm install @anthropic-ai/sdk
 pnpm install pg ioredis
 
 # Authentication and security
-pnpm install bcrypt jsonwebtoken
+pnpm install bcrypt express-session connect-redis
 
 # Validation and rate limiting
 pnpm install zod rate-limiter-flexible
@@ -164,7 +164,7 @@ pnpm install typescript tsx @types/node
 
 # Type definitions for dependencies
 pnpm install @types/express @types/cors
-pnpm install @types/bcrypt @types/jsonwebtoken
+pnpm install @types/bcrypt @types/express-session
 ```
 
 **5. Install development dependencies:**
@@ -185,7 +185,8 @@ pnpm install -D nodemon @types/pg
 | pg | PostgreSQL client |
 | ioredis | Redis client |
 | bcrypt | Password hashing |
-| jsonwebtoken | JWT auth |
+| express-session | Session middleware |
+| connect-redis | Redis session store |
 | zod | Schema validation |
 | express-rate-limit | Simple rate limiting |
 | rate-limiter-flexible | Advanced rate limiting with Redis |
@@ -601,8 +602,9 @@ ANTHROPIC_MAX_TOKENS=2000
 # Security Configuration
 # ======================
 # Generate with: openssl rand -hex 32
-JWT_SECRET=your-jwt-secret-here-generate-with-openssl
-JWT_EXPIRES_IN=7d
+SESSION_SECRET=your-session-secret-here-generate-with-openssl
+SESSION_MAX_AGE=604800000
+SESSION_NAME=mtg.sid
 
 # Bcrypt cost factor (10-12 recommended)
 BCRYPT_ROUNDS=12
@@ -664,8 +666,8 @@ cd backend
 # Copy example
 cp .env.example .env
 
-# Generate secure JWT secret
-echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env.generated
+# Generate secure session secret
+echo "SESSION_SECRET=$(openssl rand -hex 32)" >> .env.generated
 
 # Show generated secret
 cat .env.generated
@@ -673,7 +675,7 @@ cat .env.generated
 
 **Manual step:** Edit `backend/.env` and:
 1. Add your Anthropic API key (from https://console.anthropic.com/)
-2. Replace `JWT_SECRET` with the generated value
+2. Replace `SESSION_SECRET` with the generated value
 3. Adjust any ports if needed
 
 ### Verification
@@ -691,19 +693,19 @@ node -e "require('dotenv').config(); console.log('NODE_ENV:', process.env.NODE_E
 # Test 3: Verify all required variables present
 node -e "
 require('dotenv').config();
-const required = ['NODE_ENV', 'PORT', 'DATABASE_URL', 'REDIS_URL', 'JWT_SECRET'];
+const required = ['NODE_ENV', 'PORT', 'DATABASE_URL', 'REDIS_URL', 'SESSION_SECRET'];
 required.forEach(key => {
   if (!process.env[key]) console.error('Missing:', key);
   else console.log('✓', key);
 });
 "
 
-# Test 4: Verify JWT secret is strong
+# Test 4: Verify session secret is strong
 node -e "
 require('dotenv').config();
-const secret = process.env.JWT_SECRET;
-if (secret.length < 32) console.error('JWT_SECRET too short!');
-else console.log('✓ JWT_SECRET length:', secret.length);
+const secret = process.env.SESSION_SECRET;
+if (secret.length < 32) console.error('SESSION_SECRET too short!');
+else console.log('✓ SESSION_SECRET length:', secret.length);
 "
 ```
 
@@ -711,7 +713,7 @@ else console.log('✓ JWT_SECRET length:', secret.length);
 
 - [ ] .env.example created with all variables documented
 - [ ] .env created (not committed to Git)
-- [ ] JWT_SECRET generated (64+ characters)
+- [ ] SESSION_SECRET generated (32+ characters)
 - [ ] Anthropic API key added
 - [ ] All required variables present
 - [ ] Environment loads without errors
@@ -943,7 +945,7 @@ kill $SERVER_PID
 ### Environment
 - [ ] .env.example created
 - [ ] .env created (not in Git)
-- [ ] JWT_SECRET generated (64+ chars)
+- [ ] SESSION_SECRET generated (32+ chars)
 - [ ] All required variables present
 - [ ] Variables load correctly
 

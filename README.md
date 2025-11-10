@@ -88,7 +88,7 @@ A secure, scalable MTG chat assistant with:
            ↓
 ┌─────────────────────┐
 │   Anthropic API     │
-│  (Claude 3.5 Sonnet)│
+│  (Claude 4.5 Sonnet)│
 └─────────────────────┘
 
 Supporting Services:
@@ -102,7 +102,7 @@ Supporting Services:
 **Frontend:** Next.js 14 + TypeScript + TailwindCSS
 **AI:** Claude 4.5 Sonnet (Anthropic SDK)
 **DevOps:** Docker Compose, pnpm v10+
-**Security:** bcrypt, JWT, Zod validation, helmet, rate-limiter-flexible
+**Security:** bcrypt, session-based auth, Zod validation, helmet, rate-limiter-flexible
 
 **Key Principles:**
 - 🔒 Security by design (defense in depth)

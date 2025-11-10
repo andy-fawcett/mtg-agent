@@ -263,7 +263,7 @@ This document defines the security architecture for the MTG Agent web applicatio
 - Auth0 (managed service, enterprise-ready)
 - NextAuth.js (if using Next.js)
 - Passport.js (Node.js, flexible)
-- Custom JWT implementation (more control)
+- Custom session implementation (more control)
 
 **Hosting Recommendations**
 - Vercel/Netlify (frontend)

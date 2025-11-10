@@ -581,12 +581,10 @@ REDIS_PASSWORD=
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 
-# JWT
-JWT_SECRET=your-jwt-secret-here
-JWT_EXPIRES_IN=7d
-
-# Session
+# Session (server-side sessions with Redis)
 SESSION_SECRET=your-session-secret-here
+SESSION_MAX_AGE=604800000
+SESSION_NAME=mtg.sid
 
 # OAuth (if using)
 GOOGLE_CLIENT_ID=

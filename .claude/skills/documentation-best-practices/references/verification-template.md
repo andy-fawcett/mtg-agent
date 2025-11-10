@@ -300,7 +300,7 @@ Verification failed due to [specific reason].
 ## Example: Complete Verification for Auth Feature
 
 ```markdown
-## Verification - JWT Authentication Implementation
+## Verification - Session-Based Authentication Implementation
 
 ### Automated Verification
 
@@ -365,13 +365,13 @@ psql $DATABASE_URL -c "SELECT password_hash FROM users LIMIT 1;"
 # Expected: Bcrypt hash starting with $2b$
 # Actual: ✅ $2b$12$...
 
-# Verify JWT secret is loaded
-node -e "require('dotenv').config(); console.log(process.env.JWT_SECRET.length)"
+# Verify SESSION_SECRET is loaded
+node -e "require('dotenv').config(); console.log(process.env.SESSION_SECRET.length)"
 # Expected: 64 (32 bytes in hex)
 # Actual: ✅ 64
 
 # Check for hardcoded secrets
-grep -r "jwt_secret\|password" src/ --exclude="*.test.ts"
+grep -r "session_secret\|password" src/ --exclude="*.test.ts"
 # Expected: Only environment variable references
 # Actual: ✅ No hardcoded secrets found
 ```

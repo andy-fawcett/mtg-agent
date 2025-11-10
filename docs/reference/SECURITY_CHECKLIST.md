@@ -101,9 +101,8 @@ Use this checklist before deploying to production. Every item should be verified
 - [ ] Password hashing with bcrypt (cost factor ≥12) OR
 - [ ] OAuth configured with trusted providers
 - [ ] Session management secure (httpOnly, secure, sameSite)
-- [ ] JWT secrets are random and secure (32+ bytes)
-- [ ] Token expiration configured
-- [ ] Session expiration configured (30 min idle)
+- [ ] Session secrets are random and secure (32+ bytes)
+- [ ] Session expiration configured (7 days max, rolling on activity)
 
 ### Password Security (if using email/password)
 - [ ] Minimum 12 character requirement

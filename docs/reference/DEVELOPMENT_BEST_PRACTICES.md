@@ -281,7 +281,7 @@ Before committing code:
 ### Test Coverage Target: 70%+
 
 **What to Test:**
-- ✅ Authentication logic (JWT generation, verification)
+- ✅ Authentication logic (session creation, validation)
 - ✅ Password hashing and validation
 - ✅ Rate limiting calculations
 - ✅ Cost estimation functions
@@ -312,23 +312,32 @@ describe('AuthService', () => {
     });
   });
 
-  describe('generateJWT', () => {
-    it('should generate valid JWTs', () => {
-      const token = authService.generateJWT({
-        userId: '123',
-        tier: 'free'
-      });
+  describe('session creation', () => {
+    it('should create session on login', async () => {
+      const mockSession = {
+        userId: undefined,
+        tier: undefined
+      };
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      expect(decoded.userId).toBe('123');
+      await authService.login(
+        { email: 'test@example.com', password: 'SecurePass123!' },
+        mockSession
+      );
+
+      expect(mockSession.userId).toBeDefined();
+      expect(mockSession.tier).toBe('free');
     });
 
-    it('should expire in 7 days', () => {
-      const token = authService.generateJWT({ userId: '123' });
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    it('should destroy session on logout', async () => {
+      const mockSession = {
+        userId: '123',
+        tier: 'free',
+        destroy: jest.fn((callback) => callback())
+      };
 
-      const expiresIn = decoded.exp - decoded.iat;
-      expect(expiresIn).toBe(7 * 24 * 60 * 60);  // 7 days
+      await authService.logout(mockSession);
+
+      expect(mockSession.destroy).toHaveBeenCalled();
     });
   });
 });
