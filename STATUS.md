@@ -1,16 +1,16 @@
 # MTG Agent - Project Status
 
-**Last Updated:** 2025-11-09
-**Current Phase:** Phase 1 (MVP) - Rate Limiting Complete
-**Current Task:** Phase 1.4 - Claude SDK Integration
-**Overall Progress:** 50% implementation (4/8 sub-phases complete)
+**Last Updated:** 2025-11-10
+**Current Phase:** Phase 1 (MVP) - Claude SDK Integration Complete
+**Current Task:** Phase 1.5 - API Endpoints & Validation
+**Overall Progress:** 62% implementation (5/8 sub-phases complete)
 
 ---
 
 ## 📊 Phase Progress Overview
 
 ### Phase 1: MVP - Internal Use Only
-**Target:** 2 weeks (40-60 hours) | **Status:** 🚀 In Progress | **Progress:** 50%
+**Target:** 2 weeks (40-60 hours) | **Status:** 🚀 In Progress | **Progress:** 62%
 
 - [x] **Phase 1.0: Foundation** (4-6 hours) - ✅ Complete
   - Project structure, TypeScript, Docker, Express server
@@ -24,8 +24,8 @@
 - [x] **Phase 1.3: Rate Limiting** (6-8 hours) - ✅ Complete
   - Redis rate limiting, budget controls, cost estimation, tier-based limits
 
-- [ ] **Phase 1.4: Claude SDK** (6-8 hours) - ⏸️ Not Started
-  - Anthropic SDK, system prompts, jailbreak detection
+- [x] **Phase 1.4: Claude SDK** (6-8 hours) - ✅ Complete
+  - Anthropic SDK, system prompts, jailbreak detection, input/output sanitization
 
 - [ ] **Phase 1.5: API Endpoints** (4-6 hours) - ⏸️ Not Started
   - REST API with Zod validation
@@ -52,25 +52,22 @@
 
 ## 🎯 Current Session
 
-**Completed:** Phase 1.3 - Rate Limiting & Cost Controls ✅
+**Completed:** Phase 1.4 - Claude SDK Integration ✅
 
-**Next Up:** Phase 1.4 - Claude SDK Integration
+**Next Up:** Phase 1.5 - API Endpoints & Validation
 
-**What Phase 1.4 Includes:**
-- Anthropic SDK integration with Claude 4.5 Sonnet
-- System prompt engineering
-- Jailbreak detection and prevention
-- Token usage tracking
-- Error handling and retries
-- Streaming responses
+**What Phase 1.5 Includes:**
+- REST API endpoints for chat
+- Zod schema validation
+- Request/response types
+- Error handling middleware
+- Integration with all security layers
 
-**Time Estimate:** 6-8 hours
+**Time Estimate:** 4-6 hours
 
-**Architecture:** Secure backend-only API integration with hardcoded system prompts.
+**Documentation:** `docs/implementation/PHASE_1_MVP/PHASE_1.5_API.md`
 
-**Ready to proceed with Phase 1.4?** Use `/start` to continue.
-
-**Documentation:** `docs/implementation/PHASE_1_MVP/PHASE_1.4_CLAUDE_SDK.md`
+**Note:** Before proceeding with Phase 1.5, add credits to your Anthropic account at https://console.anthropic.com/settings/billing to enable actual API calls.
 
 ---
 
@@ -82,6 +79,21 @@ None currently.
 
 ## 📝 Recent Activity
 
+- **2025-11-10:** ✅ Phase 1.4 Claude SDK Integration Complete
+  - Anthropic SDK (@anthropic-ai/sdk) installed with pnpm security verification
+  - SDK configuration with API key validation, timeout (30s), and retry logic (2 retries)
+  - MTG-focused system prompt created with strict operational boundaries
+  - Jailbreak detection with 7 pattern types (instruction override, behavior modification, prompt extraction, etc.)
+  - All jailbreak detection tests passing (10/10)
+  - ChatService created with full integration:
+    - Input sanitization (null byte removal, length limits, whitespace normalization)
+    - Output sanitization (XSS prevention, prompt leakage removal, length limits)
+    - Integration with cost tracking (actual token-based costs)
+    - Integration with rate limiting (tier-based max tokens)
+    - Comprehensive error handling and logging
+  - Database logging for all requests (success and failures)
+  - Security: API keys server-side only, system prompts hardcoded
+  - Note: Anthropic account needs credits added for live API calls
 - **2025-11-09:** ✅ Phase 1.3 Rate Limiting & Cost Controls Complete
   - Dependencies installed: rate-limiter-flexible, ioredis (with pnpm security)
   - Redis configuration already in place from Phase 1.2
@@ -130,15 +142,30 @@ None currently.
 
 ## 📌 Next Steps
 
-1. Run `/start` to begin Phase 1.4 (Claude SDK Integration)
-2. Follow step-by-step tasks in PHASE_1.4_CLAUDE_SDK.md
-3. Integrate Anthropic SDK with Claude 4.5 Sonnet
-4. Implement system prompts and jailbreak detection
-5. Update this STATUS.md as tasks complete
+1. Add credits to Anthropic account (https://console.anthropic.com/settings/billing)
+2. Run `/start` to begin Phase 1.5 (API Endpoints & Validation)
+3. Follow step-by-step tasks in PHASE_1.5_API.md
+4. Create REST API endpoints for chat functionality
+5. Implement Zod schema validation for all inputs
+6. Update this STATUS.md as tasks complete
 
 ---
 
 ## 🔐 Security Checklist (Current Phase)
+
+Phase 1.4 Security Requirements:
+- [x] API keys stored in environment variables only (never in code)
+- [x] API keys never exposed to client (backend-only)
+- [x] System prompts hardcoded (not user-modifiable)
+- [x] Jailbreak detection implemented with 7 pattern types
+- [x] Input sanitization (null bytes, length limits, whitespace)
+- [x] Output sanitization (XSS prevention, prompt leakage removal)
+- [x] All requests logged to database (success and failures)
+- [x] Integration with cost tracking (actual token-based costs)
+- [x] Integration with rate limiting (tier-based max tokens)
+- [x] Timeout configured (30 seconds max)
+- [x] Retry logic configured (2 retries for transient failures)
+- [x] Error messages generic (no internal details leaked)
 
 Phase 1.3 Security Requirements:
 - [x] Rate limiting enforces tier-based access controls
