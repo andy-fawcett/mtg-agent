@@ -55,8 +55,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // API Routes
 // ======================
 import authRoutes from './routes/auth';
+import chatRoutes from './routes/chat';
 
 app.use('/api/auth', authRoutes);
+app.use('/api/chat', chatRoutes);
 
 // ======================
 // Health Check Endpoint
@@ -83,28 +85,15 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 // ======================
-// 404 Handler
+// Error Handling
 // ======================
-app.use((req: Request, res: Response) => {
-  res.status(404).json({
-    error: 'Not Found',
-    message: `Route ${req.method} ${req.path} not found`,
-    timestamp: new Date().toISOString(),
-  });
-});
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
-// ======================
-// Error Handler
-// ======================
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Error:', err);
+// 404 handler (after all routes)
+app.use(notFoundHandler);
 
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.SHOW_STACK_TRACES === 'true' ? err.message : 'Something went wrong',
-    ...(process.env.SHOW_STACK_TRACES === 'true' && { stack: err.stack }),
-  });
-});
+// Error handler (must be last)
+app.use(errorHandler);
 
 // ======================
 // Start Server
