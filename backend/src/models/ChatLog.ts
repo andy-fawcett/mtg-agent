@@ -3,21 +3,26 @@ import { ChatLog, CreateChatLogInput } from '../types/database.types';
 
 export class ChatLogModel {
   /**
-   * Create chat log entry with token breakdown and actual cost
+   * Create chat log entry with token breakdown, actual cost, and message content
    */
   static async create(input: CreateChatLogInput): Promise<ChatLog> {
     const result = await query<ChatLog>(
       `INSERT INTO chat_logs (
-        user_id, session_id, message_length, response_length,
+        user_id, session_id, conversation_id,
+        user_message, assistant_response,
+        message_length, response_length,
         input_tokens, output_tokens, tokens_used,
         actual_cost_cents, tools_used,
         success, error_message, duration_ms
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *`,
       [
         input.user_id || null,
         input.session_id || null,
+        input.conversation_id || null,
+        input.user_message || '',
+        input.assistant_response || null,
         input.message_length,
         input.response_length || null,
         input.input_tokens || null,
@@ -32,6 +37,24 @@ export class ChatLogModel {
     );
 
     return result.rows[0]!;
+  }
+
+  /**
+   * Get all messages in a conversation (ordered chronologically)
+   */
+  static async getByConversationId(
+    conversationId: string,
+    limit: number = 100
+  ): Promise<ChatLog[]> {
+    const result = await query<ChatLog>(
+      `SELECT * FROM chat_logs
+       WHERE conversation_id = $1
+       ORDER BY created_at ASC
+       LIMIT $2`,
+      [conversationId, limit]
+    );
+
+    return result.rows;
   }
 
   /**

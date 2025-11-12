@@ -38,11 +38,17 @@ export interface Session {
   created_at: Date;
 }
 
-// Chat log types (updated with token breakdown and actual cost)
+// Chat log types (updated with token breakdown, actual cost, and message content)
 export interface ChatLog {
   id: string;
   user_id: string | null;
   session_id: string | null;
+  conversation_id: string | null;  // NEW: Link to conversation
+
+  // Message content (NEW for Phase 1.7)
+  user_message: string;
+  assistant_response: string | null;
+
   message_length: number;
   response_length: number | null;
 
@@ -64,6 +70,12 @@ export interface ChatLog {
 export interface CreateChatLogInput {
   user_id?: string;
   session_id?: string;
+  conversation_id?: string;  // NEW
+
+  // Message content (NEW)
+  user_message?: string;
+  assistant_response?: string;
+
   message_length: number;
   response_length?: number;
 

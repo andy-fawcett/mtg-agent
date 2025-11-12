@@ -97,14 +97,18 @@ export async function userRateLimit(
   }
 }
 
+// Import tier limits from config
+import { getTierLimits as getConfigTierLimits } from '../config/limits';
+
 interface TierLimits {
   requestsPerDay: number;
-  maxTokens: number;
+  maxTokens: number;  // Renamed to maxOutputTokens in config, but kept here for compatibility
 }
 
 /**
  * Get rate limits and token limits based on user tier
- * Configurable via environment variables
+ * Configurable via environment variables (legacy)
+ * NOTE: New token limits are in config/limits.ts
  */
 function getTierLimits(tier: string): TierLimits {
   const limits: Record<string, TierLimits> = {
@@ -175,6 +179,64 @@ export async function budgetCheck(
     next();
   } catch (error) {
     console.error('Budget check error:', error);
+    next(error);
+  }
+}
+
+/**
+ * Token budget check middleware (Phase 1.7)
+ * Checks user's daily token usage against tier limits
+ * Blocks requests when user exceeds daily token quota
+ */
+export async function tokenBudgetCheck(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    // Skip for anonymous users (handled by request count limit)
+    if (!req.user) {
+      next();
+      return;
+    }
+
+    const tier = req.user.tier;
+    const limits = getConfigTierLimits(tier);
+
+    // Get user's tokens used today
+    const { UserDailyTokensModel } = await import('../models/UserDailyTokens');
+    const tokensUsed = await UserDailyTokensModel.getTodayUsage(req.user.id);
+
+    // Estimate tokens for this request
+    // Rough estimation: message chars / 4 for input, plus max output tokens
+    const messageLength = req.body.message?.length || 0;
+    const estimatedInputTokens = Math.ceil(messageLength / 4);
+    const estimatedTotalTokens = estimatedInputTokens + limits.maxOutputTokens;
+
+    // Check if user would exceed daily limit
+    if (tokensUsed + estimatedTotalTokens > limits.tokensPerDay) {
+      const remaining = Math.max(0, limits.tokensPerDay - tokensUsed);
+
+      res.status(429).json({
+        error: 'Daily token limit exceeded',
+        message: `You've used ${tokensUsed.toLocaleString()} of your ${limits.tokensPerDay.toLocaleString()} daily tokens. Resets at midnight UTC.`,
+        tokensUsed,
+        tokensLimit: limits.tokensPerDay,
+        tokensRemaining: remaining,
+      });
+      return;
+    }
+
+    // Add info to response headers
+    res.set({
+      'X-Tokens-Limit': String(limits.tokensPerDay),
+      'X-Tokens-Used': String(tokensUsed),
+      'X-Tokens-Remaining': String(limits.tokensPerDay - tokensUsed),
+    });
+
+    next();
+  } catch (error) {
+    console.error('Token budget check error:', error);
     next(error);
   }
 }

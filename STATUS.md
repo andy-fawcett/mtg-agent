@@ -1,9 +1,9 @@
 # MTG Agent - Project Status
 
-**Last Updated:** 2025-11-11
-**Current Phase:** Phase 1 (MVP) - Frontend Complete
-**Current Task:** Phase 1.7 - Chat Sessions & Conversation History
-**Overall Progress:** 60% implementation (6/10 sub-phases complete)
+**Last Updated:** 2025-11-12
+**Current Phase:** Phase 1 (MVP) - Backend 95% Complete, Frontend Pending
+**Current Task:** Phase 1.7 - Chat Sessions & Conversation History (Backend Complete, Testing/Frontend Remaining)
+**Overall Progress:** 65% implementation (6.5/10 sub-phases complete)
 
 ---
 
@@ -33,8 +33,12 @@
 - [x] **Phase 1.6: Frontend** (8-12 hours) - ✅ Complete
   - Next.js chat interface with authentication and chat UI
 
-- [ ] **Phase 1.7: Chat Sessions** (6-8 hours) - ⏸️ Not Started
-  - Conversation management, persistent chat history, sidebar navigation
+- [~] **Phase 1.7: Chat Sessions** (10-12 hours) - 🚧 In Progress (Backend 95%, Frontend 0%)
+  - ✅ Database: Conversations, user_daily_tokens tables, triggers
+  - ✅ Backend: Models, API routes, token tracking, summarization
+  - ✅ Features: Daily token limits per tier, 150k conversation limit, auto-summarization
+  - ⚠️ Known Issue: Chat endpoint runtime error (needs debugging)
+  - ⏸️ Frontend: Conversation sidebar, UI integration pending
 
 - [ ] **Phase 1.8: Admin Dashboard** (8-10 hours) - ⏸️ Not Started
   - Role-based admin panel for user management, analytics, monitoring, configuration
@@ -99,6 +103,55 @@ None currently.
 
 ## 📝 Recent Activity
 
+- **2025-11-12:** 🚧 Phase 1.7 Backend Implementation (95% Complete)
+  - **Database Schema (Migration 005):**
+    - Created `conversations` table with token tracking (total_tokens, summary_context)
+    - Created `user_daily_tokens` table for per-user daily token limits
+    - Updated `chat_logs` to store actual message content (user_message, assistant_response)
+    - Added database triggers for automatic token counting
+    - Added conversation_id foreign key to chat_logs
+  - **Backend Models:**
+    - ConversationModel: Full CRUD, auto-title generation, summarization support
+    - UserDailyTokensModel: Daily token tracking with atomic operations
+    - Updated ChatLogModel: Conversation support with message content
+  - **Configuration:**
+    - Created config/limits.ts with tier-based token limits
+    - Daily token limits: 10k (anonymous) to 10M (enterprise)
+    - Global 150k token limit per conversation (all tiers)
+    - Preset summarization prompt (not user-modifiable)
+  - **API Routes:**
+    - GET /api/conversations - List all user conversations
+    - POST /api/conversations - Create new conversation
+    - GET /api/conversations/:id - Get conversation with all messages
+    - PATCH /api/conversations/:id - Update conversation title
+    - DELETE /api/conversations/:id - Soft delete conversation
+    - POST /api/conversations/:id/summarize-and-continue - Summarize and create new conversation
+  - **Chat Service Updates:**
+    - Loads full conversation history and sends to Claude
+    - Auto-creates conversations if none provided
+    - Supports summary context for continued conversations
+    - Auto-generates titles from first message
+    - Updates daily token usage tracking
+  - **Middleware:**
+    - tokenBudgetCheck: Enforces daily token limits per tier
+    - Conversation 150k limit check before processing
+    - Token usage headers (X-Tokens-Limit, X-Tokens-Used, X-Tokens-Remaining)
+  - **Known Issues:**
+    - Chat endpoint returns 500 error (runtime/config issue, needs debugging)
+    - Health, auth endpoints working correctly
+    - Database queries verified working
+  - **Next Steps:**
+    - Debug chat endpoint error
+    - Implement frontend conversation sidebar
+    - Implement frontend summarization UI
+    - End-to-end testing
+- **2025-11-10:** ✅ Phase 1.6 Frontend Application Complete
+  - Next.js 14 with App Router and TypeScript
+  - Chat interface with real-time messaging
+  - Authentication pages (login/register)
+  - Session management with cookies
+  - Responsive design with TailwindCSS
+  - API integration complete
 - **2025-11-10:** ✅ Phase 1.5 API Endpoints & Validation Complete
   - Zod validation library installed (v4.1.12) with pnpm security verification
   - Validation schemas created for auth (RegisterSchema, LoginSchema) and chat (ChatSchema)

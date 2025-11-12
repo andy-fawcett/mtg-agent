@@ -1,21 +1,27 @@
 # Phase 1.7: Chat Sessions & Conversation History
 
-**Status:** ⏸️ Not Started
-**Duration Estimate:** 6-8 hours
+**Status:** 🚧 In Progress - Backend Complete (95%), Frontend Pending
+**Duration Estimate:** 10-12 hours (updated with token tracking and summarization)
+**Time Spent:** ~8 hours (backend implementation)
 **Prerequisites:** Phase 1.6 complete (frontend application working)
-**Dependencies:** Conversation management, message persistence
+**Dependencies:** Conversation management, message persistence, token tracking
 
 ## Objectives
 
-Implement session-based chat conversations with persistent history.
+Implement session-based chat conversations with persistent history, token-based rate limiting, and automatic conversation summarization.
 
 - Create conversations table for organizing chats
 - Allow users to create multiple conversation threads
-- Load and display full conversation history
+- Load and display full conversation history to Claude (context window)
 - Sidebar with conversation list
 - Ability to switch between conversations
 - Delete/archive old conversations
 - Auto-generate conversation titles from first message
+- **NEW: Track total tokens per user per day (shared across conversations)**
+- **NEW: Track total tokens per conversation**
+- **NEW: Enforce 150k token limit per conversation**
+- **NEW: One-click "Summarize & Continue" when conversation reaches 150k tokens**
+- **NEW: Automatic conversation archival and new conversation creation with summary**
 
 ---
 
@@ -42,13 +48,18 @@ CREATE TABLE IF NOT EXISTS conversations (
   -- Conversation metadata
   title VARCHAR(255),
 
+  -- Token tracking (NEW)
+  total_tokens INTEGER DEFAULT 0,
+  summary_context TEXT,  -- Stores summary from previous conversation if continued
+
   -- Timestamps
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
   last_message_at TIMESTAMP DEFAULT NOW(),
 
-  -- Soft delete
-  deleted_at TIMESTAMP
+  -- Soft delete / archive
+  deleted_at TIMESTAMP,
+  archived_at TIMESTAMP  -- NEW: Archived when summarized and continued
 );
 
 -- Indexes
@@ -94,6 +105,47 @@ AFTER INSERT ON chat_logs
 FOR EACH ROW
 WHEN (NEW.conversation_id IS NOT NULL)
 EXECUTE FUNCTION update_conversation_timestamp();
+
+-- ======================
+-- User Daily Token Usage (NEW)
+-- ======================
+CREATE TABLE IF NOT EXISTS user_daily_tokens (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+
+  -- Token tracking (input + output combined)
+  total_tokens_used INTEGER DEFAULT 0,
+  request_count INTEGER DEFAULT 0,
+
+  -- Timestamps
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- One record per user per day
+  UNIQUE(user_id, date)
+);
+
+-- Indexes
+CREATE INDEX idx_user_daily_tokens_user ON user_daily_tokens(user_id, date DESC);
+CREATE INDEX idx_user_daily_tokens_date ON user_daily_tokens(date);
+
+-- Trigger to update conversation total_tokens on chat_log insert
+CREATE OR REPLACE FUNCTION update_conversation_tokens()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE conversations
+  SET total_tokens = total_tokens + NEW.tokens_used
+  WHERE id = NEW.conversation_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_conversation_tokens
+AFTER INSERT ON chat_logs
+FOR EACH ROW
+WHEN (NEW.conversation_id IS NOT NULL AND NEW.tokens_used IS NOT NULL)
+EXECUTE FUNCTION update_conversation_tokens();
 ```
 
 **Run migration:**
@@ -1036,24 +1088,586 @@ export default function ChatPage() {
 
 ---
 
+## Task 1.7.4: Token Tracking & Conversation Limits
+
+**Estimated Time:** 90 minutes
+
+### Objectives
+
+Implement token-based rate limiting and conversation length management.
+
+### Steps
+
+**Create `backend/src/models/UserDailyTokens.ts`:**
+
+```typescript
+import { pool } from '../db/client';
+
+export interface UserDailyTokens {
+  id: string;
+  userId: string;
+  date: Date;
+  totalTokensUsed: number;
+  requestCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class UserDailyTokensModel {
+  /**
+   * Get or create today's token usage for user
+   */
+  static async getOrCreateToday(userId: string): Promise<UserDailyTokens> {
+    const result = await pool.query(
+      `INSERT INTO user_daily_tokens (user_id, date, total_tokens_used, request_count)
+       VALUES ($1, CURRENT_DATE, 0, 0)
+       ON CONFLICT (user_id, date)
+       DO UPDATE SET updated_at = NOW()
+       RETURNING *`,
+      [userId]
+    );
+
+    return this.mapRow(result.rows[0]);
+  }
+
+  /**
+   * Add tokens to user's daily total
+   */
+  static async addTokens(userId: string, tokens: number): Promise<void> {
+    await pool.query(
+      `INSERT INTO user_daily_tokens (user_id, date, total_tokens_used, request_count)
+       VALUES ($1, CURRENT_DATE, $2, 1)
+       ON CONFLICT (user_id, date)
+       DO UPDATE SET
+         total_tokens_used = user_daily_tokens.total_tokens_used + $2,
+         request_count = user_daily_tokens.request_count + 1,
+         updated_at = NOW()`,
+      [userId, tokens]
+    );
+  }
+
+  /**
+   * Get user's token usage for today
+   */
+  static async getTodayUsage(userId: string): Promise<number> {
+    const result = await pool.query(
+      `SELECT total_tokens_used
+       FROM user_daily_tokens
+       WHERE user_id = $1 AND date = CURRENT_DATE`,
+      [userId]
+    );
+
+    return result.rows.length > 0 ? result.rows[0].total_tokens_used : 0;
+  }
+
+  private static mapRow(row: any): UserDailyTokens {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      date: row.date,
+      totalTokensUsed: row.total_tokens_used,
+      requestCount: row.request_count,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+}
+```
+
+**Update `backend/src/middleware/rateLimit.ts` to use token-based limits:**
+
+```typescript
+// Add to TierLimits interface
+interface TierLimits {
+  tokensPerDay: number;        // NEW: Total tokens allowed per day
+  maxOutputTokens: number;     // RENAMED from maxTokens
+}
+
+// Update getTierLimits
+function getTierLimits(tier: string): TierLimits {
+  const limits: Record<string, TierLimits> = {
+    anonymous: {
+      tokensPerDay: 10_000,
+      maxOutputTokens: 1_000,
+    },
+    free: {
+      tokensPerDay: 100_000,
+      maxOutputTokens: 2_000,
+    },
+    premium: {
+      tokensPerDay: 1_000_000,
+      maxOutputTokens: 4_000,
+    },
+    enterprise: {
+      tokensPerDay: 10_000_000,
+      maxOutputTokens: 8_000,
+    },
+  };
+
+  return limits[tier] || limits.free;
+}
+
+// Add new middleware: tokenBudgetCheck
+export async function tokenBudgetCheck(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    // Skip for anonymous users (handled by request count limit)
+    if (!req.user) {
+      next();
+      return;
+    }
+
+    const tier = req.user.tier;
+    const limits = getTierLimits(tier);
+
+    // Get user's tokens used today
+    const { UserDailyTokensModel } = await import('../models/UserDailyTokens');
+    const tokensUsed = await UserDailyTokensModel.getTodayUsage(req.user.id);
+
+    // Estimate tokens for this request (rough: message chars / 4)
+    const messageLength = req.body.message?.length || 0;
+    const estimatedInputTokens = Math.ceil(messageLength / 4);
+    const estimatedTotalTokens = estimatedInputTokens + limits.maxOutputTokens;
+
+    // Check if user would exceed daily limit
+    if (tokensUsed + estimatedTotalTokens > limits.tokensPerDay) {
+      const remaining = Math.max(0, limits.tokensPerDay - tokensUsed);
+
+      res.status(429).json({
+        error: 'Daily token limit exceeded',
+        message: `You've used ${tokensUsed.toLocaleString()} of your ${limits.tokensPerDay.toLocaleString()} daily tokens. Resets at midnight UTC.`,
+        tokensUsed,
+        tokensLimit: limits.tokensPerDay,
+        tokensRemaining: remaining,
+      });
+      return;
+    }
+
+    // Add info to response headers
+    res.set({
+      'X-Tokens-Limit': String(limits.tokensPerDay),
+      'X-Tokens-Used': String(tokensUsed),
+      'X-Tokens-Remaining': String(limits.tokensPerDay - tokensUsed),
+    });
+
+    next();
+  } catch (error) {
+    console.error('Token budget check error:', error);
+    next(error);
+  }
+}
+```
+
+**Add conversation token limit constant:**
+
+```typescript
+// backend/src/config/limits.ts (NEW FILE)
+export const CONVERSATION_LIMITS = {
+  MAX_TOKENS: 150_000,           // Hard limit per conversation
+  WARNING_TOKENS: 120_000,       // Soft warning (not used - per your requirements)
+};
+```
+
+### Verification
+
+```bash
+# Test token tracking
+curl -X POST http://localhost:3000/api/chat \
+  -H "Cookie: connect.sid=YOUR_SESSION" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Test message"}'
+
+# Check response headers
+# X-Tokens-Limit, X-Tokens-Used, X-Tokens-Remaining
+```
+
+### Success Criteria
+
+- [ ] UserDailyTokens model created
+- [ ] Token tracking middleware working
+- [ ] Daily token limits enforced per tier
+- [ ] Response headers show token usage
+- [ ] Conversation token tracking automatic (via trigger)
+
+---
+
+## Task 1.7.5: Summarize & Continue Feature
+
+**Estimated Time:** 120 minutes
+
+### Objectives
+
+Implement one-click conversation summarization when hitting 150k token limit.
+
+### Steps
+
+**Add to `backend/src/routes/conversations.ts`:**
+
+```typescript
+/**
+ * POST /api/conversations/:id/summarize-and-continue
+ * Summarize current conversation and create new one with summary context
+ */
+router.post('/:id/summarize-and-continue', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get conversation
+    const conversation = await ConversationModel.getById(id, req.user!.id);
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found',
+      });
+    }
+
+    // Get all messages
+    const messages = await ChatLogModel.getByConversationId(id);
+
+    if (messages.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot summarize empty conversation',
+      });
+    }
+
+    // Build conversation history for Claude
+    const conversationHistory = messages.map(msg => [
+      { role: 'user' as const, content: msg.userMessage },
+      { role: 'assistant' as const, content: msg.assistantResponse || '' },
+    ]).flat().filter(msg => msg.content);
+
+    // Summarization prompt (preset, not user-modifiable)
+    const SUMMARIZATION_PROMPT = `Please provide a concise summary of this Magic: The Gathering conversation, including:
+- Key topics discussed
+- Important cards, rules, or strategies mentioned
+- Any decisions or conclusions reached
+- Relevant context needed to continue the conversation
+
+Keep the summary under 500 tokens.`;
+
+    // Call Claude to summarize
+    const anthropic = getAnthropicClient();
+    const summaryResponse = await anthropic.messages.create({
+      model: CLAUDE_CONFIG.model,
+      max_tokens: 1000,
+      system: MTG_SYSTEM_PROMPT,
+      messages: [
+        ...conversationHistory,
+        { role: 'user', content: SUMMARIZATION_PROMPT }
+      ],
+    });
+
+    const summary = summaryResponse.content
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as any).text)
+      .join('\n');
+
+    // Create new conversation with summary
+    const newConversation = await ConversationModel.create(
+      req.user!.id,
+      `Continued: ${conversation.title || 'Conversation'}`
+    );
+
+    // Store summary context
+    await ConversationModel.setSummaryContext(newConversation.id, summary);
+
+    // Archive old conversation
+    await ConversationModel.archive(id);
+
+    res.json({
+      success: true,
+      newConversationId: newConversation.id,
+      summary,
+      message: 'Conversation summarized successfully',
+    });
+
+  } catch (error) {
+    console.error('Failed to summarize conversation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to summarize conversation',
+    });
+  }
+});
+```
+
+**Add methods to ConversationModel:**
+
+```typescript
+/**
+ * Set summary context for continued conversation
+ */
+static async setSummaryContext(id: string, summary: string): Promise<void> {
+  await pool.query(
+    `UPDATE conversations
+     SET summary_context = $1, updated_at = NOW()
+     WHERE id = $2`,
+    [summary, id]
+  );
+}
+
+/**
+ * Archive conversation (soft archive, different from delete)
+ */
+static async archive(id: string): Promise<void> {
+  await pool.query(
+    `UPDATE conversations
+     SET archived_at = NOW(), updated_at = NOW()
+     WHERE id = $1`,
+    [id]
+  );
+}
+
+/**
+ * Get conversation with token count check
+ */
+static async getByIdWithTokenCheck(id: string, userId: string): Promise<{
+  conversation: Conversation;
+  canContinue: boolean;
+  requiresSummary: boolean;
+}> {
+  const conversation = await this.getById(id, userId);
+  if (!conversation) {
+    throw new Error('Conversation not found');
+  }
+
+  const { CONVERSATION_LIMITS } = await import('../config/limits');
+
+  return {
+    conversation,
+    canContinue: conversation.totalTokens < CONVERSATION_LIMITS.MAX_TOKENS,
+    requiresSummary: conversation.totalTokens >= CONVERSATION_LIMITS.MAX_TOKENS,
+  };
+}
+```
+
+**Update chat endpoint to check conversation limits:**
+
+```typescript
+// In POST /api/chat endpoint, before calling ChatService
+
+if (conversationId && userId) {
+  const { ConversationModel } = await import('../models/Conversation');
+  const { CONVERSATION_LIMITS } = await import('../config/limits');
+
+  const conversation = await ConversationModel.getById(conversationId, userId);
+
+  if (!conversation) {
+    return res.status(404).json({
+      error: 'Conversation not found',
+    });
+  }
+
+  // Check if conversation has hit token limit
+  if (conversation.totalTokens >= CONVERSATION_LIMITS.MAX_TOKENS) {
+    return res.status(400).json({
+      error: 'conversation_limit_reached',
+      message: 'This conversation has reached its maximum length.',
+      conversationTokens: conversation.totalTokens,
+      maxTokens: CONVERSATION_LIMITS.MAX_TOKENS,
+      action: {
+        type: 'summarize_required',
+        endpoint: `/api/conversations/${conversationId}/summarize-and-continue`,
+        buttonText: 'Summarize & Start New Chat',
+      },
+    });
+  }
+}
+```
+
+### Verification
+
+```bash
+# Create long conversation (simulate)
+# ... send many messages ...
+
+# Try to send message when over limit
+# Should get conversation_limit_reached error
+
+# Summarize and continue
+curl -X POST http://localhost:3000/api/conversations/{id}/summarize-and-continue \
+  -H "Cookie: connect.sid=YOUR_SESSION"
+```
+
+### Success Criteria
+
+- [ ] Summarize endpoint working
+- [ ] Summary generated by Claude
+- [ ] New conversation created with summary context
+- [ ] Old conversation archived
+- [ ] Chat endpoint blocks messages on 150k limit
+- [ ] Error response includes summarization action
+
+---
+
+## Task 1.7.6: Frontend - Summarization UI
+
+**Estimated Time:** 60 minutes
+
+### Objectives
+
+Add UI to handle conversation length limits and one-click summarization.
+
+### Steps
+
+**Update `frontend/app/chat/page.tsx`:**
+
+```typescript
+// Add state for conversation limit error
+const [conversationLimitReached, setConversationLimitReached] = useState(false);
+const [conversationTokens, setConversationTokens] = useState(0);
+
+// Update sendMessage to handle limit
+async function sendMessage(e: React.FormEvent) {
+  e.preventDefault();
+  if (!input.trim() || loading) return;
+
+  // ... existing code ...
+
+  try {
+    const response = await api.post('/api/chat', {
+      message: input,
+      conversationId: currentConversationId,
+    });
+
+    // ... handle success ...
+
+  } catch (err: any) {
+    // Check for conversation limit error
+    if (err.response?.data?.error === 'conversation_limit_reached') {
+      setConversationLimitReached(true);
+      setConversationTokens(err.response.data.conversationTokens);
+      setError('This conversation has reached its maximum length. Please summarize to continue.');
+      return;
+    }
+
+    setError(err.response?.data?.message || 'Failed to send message');
+  } finally {
+    setLoading(false);
+  }
+}
+
+// Add summarize handler
+async function handleSummarizeAndContinue() {
+  if (!currentConversationId) return;
+
+  setLoading(true);
+  setError('');
+
+  try {
+    const response = await api.post(
+      `/api/conversations/${currentConversationId}/summarize-and-continue`
+    );
+
+    // Switch to new conversation
+    setCurrentConversationId(response.data.newConversationId);
+    setConversationLimitReached(false);
+
+    // Show summary message
+    setMessages([
+      {
+        id: 'summary',
+        role: 'assistant',
+        content: `📋 **Conversation Summary**\n\n${response.data.summary}\n\n---\n\n*This is a continuation of a previous conversation. The context above summarizes what we discussed.*`,
+        timestamp: new Date(),
+      },
+    ]);
+
+    // Success notification
+    alert('Conversation summarized! Continue chatting here.');
+
+  } catch (err) {
+    setError('Failed to summarize conversation');
+  } finally {
+    setLoading(false);
+  }
+}
+
+// Add summarization banner in JSX (before input area)
+{conversationLimitReached && (
+  <div className="border-t bg-yellow-50 border-yellow-200">
+    <div className="max-w-3xl mx-auto px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-yellow-800">
+            Conversation Limit Reached ({conversationTokens.toLocaleString()} / 150,000 tokens)
+          </p>
+          <p className="text-xs text-yellow-700 mt-1">
+            This conversation is too long. Summarize to continue chatting.
+          </p>
+        </div>
+        <button
+          onClick={handleSummarizeAndContinue}
+          disabled={loading}
+          className="ml-4 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-50 text-sm font-medium"
+        >
+          Summarize & Continue
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+```
+
+### Success Criteria
+
+- [ ] Conversation limit error detected
+- [ ] Yellow banner shown when limit reached
+- [ ] "Summarize & Continue" button works
+- [ ] New conversation created with summary
+- [ ] User can continue chatting
+- [ ] Summary displayed as first message
+
+---
+
 ## Phase 1.7 Completion Checklist
 
-### Backend
-- [ ] Conversations table created
+### Backend - Conversations
+- [ ] Conversations table created with token tracking
+- [ ] user_daily_tokens table created
 - [ ] chat_logs updated to store message content
 - [ ] Conversation model working
-- [ ] Conversation API endpoints functional
+- [ ] Conversation API endpoints functional (list, create, get, update, delete)
 - [ ] Chat service creates conversations
 - [ ] Conversation titles auto-generated
+- [ ] Conversation history sent to Claude API
 
-### Frontend
+### Backend - Token Tracking
+- [ ] UserDailyTokens model created
+- [ ] Token tracking middleware (tokenBudgetCheck)
+- [ ] Daily token limits enforced per tier
+- [ ] Token usage headers in API responses
+- [ ] Conversation token counter automatic (database trigger)
+- [ ] Conversation 150k limit enforced
+
+### Backend - Summarization
+- [ ] Summarize-and-continue endpoint working
+- [ ] Claude generates conversation summaries
+- [ ] New conversation created with summary context
+- [ ] Old conversation archived (not deleted)
+- [ ] Summary stored in new conversation
+
+### Frontend - Conversations
 - [ ] Conversation sidebar implemented
 - [ ] Can list all conversations
 - [ ] Can create new conversation
 - [ ] Can switch between conversations
 - [ ] Can delete conversations
 - [ ] Messages persist and load correctly
+- [ ] Conversation history loads on selection
 - [ ] Responsive design maintained
+
+### Frontend - Summarization
+- [ ] Conversation limit error detected
+- [ ] Yellow banner shown when limit reached
+- [ ] "Summarize & Continue" button functional
+- [ ] New conversation created with summary
+- [ ] User can continue chatting after summarization
+- [ ] Summary displayed as first message in new conversation
 
 ### Testing
 - [ ] Create multiple conversations
@@ -1062,6 +1676,11 @@ export default function ChatPage() {
 - [ ] Delete conversation works
 - [ ] Anonymous users work without sidebar
 - [ ] Conversation titles display correctly
+- [ ] Token tracking works (check headers)
+- [ ] Daily token limits enforced
+- [ ] Conversation 150k limit triggers summarization
+- [ ] Summarization creates new conversation
+- [ ] Archived conversations not shown in sidebar
 
 ## Next Steps
 

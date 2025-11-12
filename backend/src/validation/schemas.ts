@@ -20,6 +20,7 @@ export const LoginSchema = z.object({
 /**
  * Chat validation schema
  * Trims whitespace first, then validates length
+ * Phase 1.7: Added optional conversationId
  */
 export const ChatSchema = z.object({
   message: z.string()
@@ -29,6 +30,7 @@ export const ChatSchema = z.object({
         .min(1, 'Message cannot be empty')
         .max(4000, 'Message too long (max 4000 characters)')
     ),
+  conversationId: z.string().uuid('Invalid conversation ID').optional(),
 });
 
 /**

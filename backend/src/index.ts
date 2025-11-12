@@ -23,7 +23,7 @@ app.use(helmet());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3001',
   credentials: true,
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE'],  // Added PATCH and DELETE for conversations
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
@@ -56,9 +56,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // ======================
 import authRoutes from './routes/auth';
 import chatRoutes from './routes/chat';
+import conversationRoutes from './routes/conversations';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/conversations', conversationRoutes);  // NEW: Phase 1.7
 
 // ======================
 // Health Check Endpoint

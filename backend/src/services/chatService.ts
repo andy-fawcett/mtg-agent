@@ -2,17 +2,19 @@ import { anthropic, CLAUDE_CONFIG } from '../config/anthropic';
 import { MTG_SYSTEM_PROMPT, detectJailbreakAttempt } from '../prompts/mtgSystemPrompt';
 import { CostService } from './costService';
 import { ChatLogModel } from '../models/ChatLog';
-import { getTierLimits } from '../middleware/rateLimit';
+import { getTierLimits } from '../config/limits';
 
 export interface ChatRequest {
   message: string;
   userId?: string;
   sessionId?: string;
   userTier: string;
+  conversationId?: string;  // NEW: For conversation support
 }
 
 export interface ChatResponse {
   response: string;
+  conversationId: string | null;  // NEW: Return conversation ID
   tokensUsed: number;
   costCents: number;
   model: string;
@@ -21,10 +23,10 @@ export interface ChatResponse {
 export class ChatService {
   /**
    * Send message to Claude and get response
-   * Includes: jailbreak detection, sanitization, cost tracking, logging
+   * Includes: jailbreak detection, sanitization, cost tracking, logging, conversation history
    */
   static async chat(request: ChatRequest): Promise<ChatResponse> {
-    const { message, userId, sessionId, userTier } = request;
+    const { message, userId, sessionId, userTier, conversationId } = request;
     const startTime = Date.now();
 
     try {
@@ -41,6 +43,8 @@ export class ChatService {
         await ChatLogModel.create({
           user_id: userId,
           session_id: sessionId,
+          conversation_id: conversationId,
+          user_message: message,
           message_length: message.length,
           success: false,
           error_message: `Jailbreak attempt: ${jailbreakCheck.reason}`,
@@ -50,55 +54,115 @@ export class ChatService {
         throw new Error('Invalid request detected');
       }
 
-      // 2. Get tier limits for max tokens
+      // 2. Handle conversation creation/loading
+      let activeConversationId = conversationId || null;
+
+      // If user is authenticated and no conversation provided, create one
+      if (userId && !activeConversationId) {
+        const { ConversationModel } = await import('../models/Conversation');
+        const conversation = await ConversationModel.create(userId);
+        activeConversationId = conversation.id;
+      }
+
+      // 3. Load conversation history if conversation exists
+      let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      let summaryContext: string | null = null;
+
+      if (activeConversationId) {
+        const { ConversationModel } = await import('../models/Conversation');
+
+        // Get conversation to check for summary context
+        if (userId) {
+          const conversation = await ConversationModel.getById(activeConversationId, userId);
+          if (conversation) {
+            summaryContext = conversation.summaryContext;
+          }
+        }
+
+        // Load previous messages in conversation
+        const previousMessages = await ChatLogModel.getByConversationId(activeConversationId);
+
+        for (const msg of previousMessages) {
+          if (msg.user_message) {
+            conversationHistory.push({
+              role: 'user',
+              content: msg.user_message,
+            });
+          }
+          if (msg.assistant_response) {
+            conversationHistory.push({
+              role: 'assistant',
+              content: msg.assistant_response,
+            });
+          }
+        }
+      }
+
+      // 4. Get tier limits for max output tokens
       const limits = getTierLimits(userTier);
 
-      // 3. Sanitize input
+      // 5. Sanitize input
       const sanitizedMessage = this.sanitizeInput(message);
 
-      // 4. Call Claude API
-      const claudeResponse = await anthropic.messages.create({
-        model: CLAUDE_CONFIG.model,
-        max_tokens: limits.maxTokens,
-        temperature: 0.7,
-        system: MTG_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: sanitizedMessage,
-          },
-        ],
+      // 6. Build system prompt (include summary if present)
+      let systemPrompt = MTG_SYSTEM_PROMPT;
+      if (summaryContext) {
+        systemPrompt = `${MTG_SYSTEM_PROMPT}\n\n**Previous Conversation Summary:**\n${summaryContext}\n\n**Current Conversation Continues Below:**`;
+      }
+
+      // 7. Add new message to conversation history
+      conversationHistory.push({
+        role: 'user',
+        content: sanitizedMessage,
       });
 
-      // 5. Extract response text from content blocks
+      // 8. Call Claude API with full conversation history
+      const claudeResponse = await anthropic.messages.create({
+        model: CLAUDE_CONFIG.model,
+        max_tokens: limits.maxOutputTokens,  // FIXED: Use maxOutputTokens from config
+        temperature: 0.7,
+        system: systemPrompt,
+        messages: conversationHistory,
+      });
+
+      // 9. Extract response text from content blocks
       const responseText = claudeResponse.content
         .filter((block) => block.type === 'text')
         .map((block) => (block as any).text)
         .join('\n');
 
-      // 6. Sanitize output
+      // 10. Sanitize output
       const sanitizedResponse = this.sanitizeOutput(responseText);
 
-      // 7. Calculate tokens and cost
+      // 11. Calculate tokens and cost
       const inputTokens = claudeResponse.usage.input_tokens;
       const outputTokens = claudeResponse.usage.output_tokens;
       const tokensUsed = inputTokens + outputTokens;
       const duration = Date.now() - startTime;
 
-      // 8. Calculate actual cost in cents
+      // 12. Calculate actual cost in cents
       const costCents = await this.calculateActualCost(
         inputTokens,
         outputTokens,
         CLAUDE_CONFIG.model
       );
 
-      // 9. Record cost to daily tracking
+      // 13. Record cost to daily tracking
       await CostService.recordCost(tokensUsed, userId);
 
-      // 10. Log successful chat to database
+      // 14. Update user's daily token usage (Phase 1.7)
+      if (userId) {
+        const { UserDailyTokensModel } = await import('../models/UserDailyTokens');
+        await UserDailyTokensModel.addTokens(userId, tokensUsed);
+      }
+
+      // 15. Log successful chat to database (with message content and conversation ID)
       await ChatLogModel.create({
         user_id: userId,
         session_id: sessionId,
+        conversation_id: activeConversationId,
+        user_message: message,
+        assistant_response: responseText,
         message_length: message.length,
         response_length: responseText.length,
         input_tokens: inputTokens,
@@ -109,8 +173,16 @@ export class ChatService {
         duration_ms: duration,
       });
 
+      // 16. Auto-generate conversation title if this is the first message
+      if (activeConversationId && userId && conversationHistory.length === 1) {
+        const { ConversationModel } = await import('../models/Conversation');
+        const title = ConversationModel.generateTitle(message);
+        await ConversationModel.updateTitle(activeConversationId, userId, title);
+      }
+
       return {
         response: sanitizedResponse,
+        conversationId: activeConversationId,
         tokensUsed,
         costCents,
         model: CLAUDE_CONFIG.model,
@@ -118,10 +190,12 @@ export class ChatService {
     } catch (error: any) {
       const duration = Date.now() - startTime;
 
-      // Log error to database
+      // Log error to database (with conversation ID)
       await ChatLogModel.create({
         user_id: userId,
         session_id: sessionId,
+        conversation_id: conversationId,
+        user_message: message,
         message_length: message.length,
         success: false,
         error_message: error.message || 'Unknown error',

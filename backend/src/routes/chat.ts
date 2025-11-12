@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { ChatService } from '../services/chatService';
 import { requireAuth, optionalAuth } from '../middleware/auth';
-import { ipRateLimit, userRateLimit, budgetCheck } from '../middleware/rateLimit';
+import { ipRateLimit, userRateLimit, budgetCheck, tokenBudgetCheck } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { ChatSchema } from '../validation/schemas';
+import { CONVERSATION_LIMITS } from '../config/limits';
 
 const router = Router();
 
@@ -15,34 +16,66 @@ const router = Router();
  * 1. ipRateLimit - Rate limit by IP (10/min)
  * 2. optionalAuth - Load user if authenticated (but allow anonymous)
  * 3. userRateLimit - Rate limit by user tier or IP
- * 4. budgetCheck - Check daily budget limits
- * 5. validate - Validate message format
+ * 4. tokenBudgetCheck - Check user's daily token limit (NEW Phase 1.7)
+ * 5. budgetCheck - Check daily budget limits
+ * 6. validate - Validate message format
  */
 router.post(
   '/',
-  ipRateLimit,        // IP-based rate limiting
-  optionalAuth,       // Authentication (optional for anonymous)
-  userRateLimit,      // User/anonymous rate limiting
-  budgetCheck,        // Check daily budget
+  ipRateLimit,          // IP-based rate limiting
+  optionalAuth,         // Authentication (optional for anonymous)
+  userRateLimit,        // User/anonymous rate limiting
+  tokenBudgetCheck,     // NEW: Check daily token usage
+  budgetCheck,          // Check daily budget
   validate(ChatSchema), // Validate input
   async (req: Request, res: Response) => {
     try {
-      const { message } = req.body;
+      const { message, conversationId } = req.body;
 
       // Get user info
       const userId = req.user?.id;
       const userTier = req.user?.tier || 'anonymous';
+
+      // Check conversation limit if conversationId provided
+      if (conversationId && userId) {
+        const { ConversationModel } = await import('../models/Conversation');
+        const conversation = await ConversationModel.getById(conversationId, userId);
+
+        if (!conversation) {
+          return res.status(404).json({
+            error: 'Conversation not found',
+            message: 'The specified conversation does not exist',
+          });
+        }
+
+        // Check if conversation has hit 150k token limit
+        if (conversation.totalTokens >= CONVERSATION_LIMITS.MAX_TOKENS) {
+          return res.status(400).json({
+            error: 'conversation_limit_reached',
+            message: 'This conversation has reached its maximum length.',
+            conversationTokens: conversation.totalTokens,
+            maxTokens: CONVERSATION_LIMITS.MAX_TOKENS,
+            action: {
+              type: 'summarize_required',
+              endpoint: `/api/conversations/${conversationId}/summarize-and-continue`,
+              buttonText: 'Summarize & Start New Chat',
+            },
+          });
+        }
+      }
 
       // Call chat service
       const response = await ChatService.chat({
         message,
         userId,
         userTier,
+        conversationId,
       });
 
       // Success response
       res.status(200).json({
         response: response.response,
+        conversationId: response.conversationId,  // NEW: Return conversation ID
         metadata: {
           tokensUsed: response.tokensUsed,
           model: response.model,
@@ -50,7 +83,16 @@ router.post(
         },
       });
     } catch (error: any) {
+      // Write error to file for debugging
+      const fs = require('fs');
+      fs.appendFileSync('/tmp/chat-error.log', `\n\n=== ${new Date().toISOString()} ===\n`);
+      fs.appendFileSync('/tmp/chat-error.log', `Error: ${error}\n`);
+      fs.appendFileSync('/tmp/chat-error.log', `Message: ${error.message}\n`);
+      fs.appendFileSync('/tmp/chat-error.log', `Stack: ${error.stack}\n`);
+
       console.error('Chat endpoint error:', error);
+      console.error('Error stack:', error.stack);
+      console.error('Error message:', error.message);
 
       // Handle specific error types
       if (error.message === 'Invalid request detected') {
