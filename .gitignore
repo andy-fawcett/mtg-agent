@@ -29,6 +29,9 @@ build/
 logs/
 *.tsbuildinfo
 
+# Process IDs from dev scripts
+*.pid
+
 # IDE
 .vscode/
 .idea/

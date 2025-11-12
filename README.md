@@ -21,6 +21,23 @@ A production-ready web application providing an AI-powered Magic: The Gathering 
 
 ## 🚀 Quick Start for Developers
 
+### Start Development Environment
+
+```bash
+# Start all services (Docker, Backend, Frontend)
+./start-dev.sh
+
+# Stop all services
+./stop-dev.sh
+```
+
+**What starts:**
+- Docker containers (PostgreSQL on :5434, Redis on :6379)
+- Backend API server (http://localhost:3000)
+- Frontend app (http://localhost:3001)
+
+**See:** [Development Scripts Documentation](docs/reference/DEV_SCRIPTS.md)
+
 ### For Claude Code Users:
 ```bash
 # Start a development session (context-aware)
