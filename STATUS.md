@@ -1,7 +1,7 @@
 # MTG Agent - Project Status
 
-**Last Updated:** 2025-11-12
-**Current Phase:** Phase 1 (MVP) - Phase 1.7 Complete
+**Last Updated:** 2025-11-24
+**Current Phase:** Phase 1 (MVP) - Phase 1.7 Complete (100%)
 **Current Task:** Phase 1.8 - Admin Dashboard (Next)
 **Overall Progress:** 70% implementation (7/10 sub-phases complete)
 
@@ -33,14 +33,19 @@
 - [x] **Phase 1.6: Frontend** (8-12 hours) - ✅ Complete
   - Next.js chat interface with authentication and chat UI
 
-- [x] **Phase 1.7: Chat Sessions** (10-12 hours) - ✅ Complete
-  - ✅ Database: Conversations, user_daily_tokens tables, triggers
+- [x] **Phase 1.7: Chat Sessions** (10-12 hours) - ✅ Complete (100%)
+  - ✅ Database: Conversations, user_daily_tokens tables, triggers, SystemConfig table
   - ✅ Backend: Models, API routes, token tracking, summarization - FULLY FUNCTIONAL
-  - ✅ Features: Daily token limits per tier, 150k conversation limit, auto-summarization
+  - ✅ Features: Daily token limits per tier, conversation limit (configurable), auto-summarization
   - ✅ Chat endpoint tested and working (conversation history functional)
   - ✅ Frontend: Conversation sidebar with create/switch/delete functionality
   - ✅ Frontend: Summarization UI with yellow banner and "Summarize & Continue" button
-  - ✅ Full conversation persistence and loading
+  - ✅ Frontend: Daily token usage display in header with color-coded percentage
+  - ✅ Frontend: Archived conversations properly block input (read-only)
+  - ✅ Frontend: "Summarize & Continue" button persists on page reload
+  - ✅ Config: Dynamic configuration system (no restart needed, 60s cache)
+  - ✅ Config: All rate limits and budgets in database (system_config table)
+  - ✅ Testing: Comprehensive automated tests completed (Phase 1.7 test results documented)
 
 - [ ] **Phase 1.8: Admin Dashboard** (8-10 hours) - ⏸️ Not Started
   - Role-based admin panel for user management, analytics, monitoring, configuration
@@ -108,6 +113,38 @@ None currently.
 
 ## 📝 Recent Activity
 
+- **2025-11-24:** ✅ Phase 1.7 Final Fixes & Testing - Frontend Integration Complete
+  - **Bug Fixes:**
+    - Fixed archived conversation property mismatch (archived_at vs archivedAt)
+    - Fixed "Summarize & Continue" button not appearing on page reload
+    - Fixed missing await on getTierLimits() in stats endpoint
+    - Fixed conversation limit validation (lowered minimums to 100 tokens for testing)
+    - Fixed toLocaleString errors with comprehensive null checks
+  - **UI Improvements:**
+    - Added daily token usage display in header with color-coded percentage
+    - Green (<75%), Yellow (75-89%), Red (≥90%) color coding
+    - Hover tooltip shows full token count and reset time (midnight UTC)
+    - Archived conversations now properly show read-only message
+    - Archived conversations show "Summarize & Continue" button on reload
+  - **Backend Enhancements:**
+    - Added maxTokens to GET /api/conversations/:id response
+    - Lowered conversation limit minimums to 100 tokens (testing-friendly)
+    - Added debug logging for conversation loading
+  - **Configuration Updates:**
+    - Set conversation.max_tokens to 1000 (testing)
+    - Set conversation.warning_tokens to 500 (testing)
+    - Free tier tokens_per_day: 100,000 (restored after testing)
+  - **Testing:**
+    - All Phase 1.7 features verified working
+    - Automated test results documented in PHASE_1.7_TEST_RESULTS.md
+    - Manual testing of archived conversations: ✅ PASS
+    - Manual testing of summarization: ✅ PASS
+    - Manual testing of token limits: ✅ PASS
+  - **Documentation:**
+    - Updated STATUS.md with Phase 1.7 completion (100%)
+    - Created comprehensive test results documentation
+    - All changes committed with detailed commit message
+  - **Next Steps:** Phase 1.8 - Admin Dashboard
 - **2025-11-12:** ✅ Phase 1.7 Complete - Chat Sessions & Conversation History
   - **Frontend Implementation:**
     - Created `ConversationSidebar.tsx` component with dark theme
