@@ -98,8 +98,8 @@ export class ChatService {
         }
       }
 
-      // 4. Get tier limits for max output tokens
-      const limits = getTierLimits(userTier);
+      // 4. Get tier limits for max output tokens (from database)
+      const limits = await getTierLimits(userTier);
 
       // 5. Sanitize input
       const sanitizedMessage = this.sanitizeInput(message);

@@ -34,7 +34,7 @@ export class ConversationModel {
   }
 
   /**
-   * Get all conversations for a user (excluding archived and deleted)
+   * Get all conversations for a user (excluding deleted, including archived)
    */
   static async getByUserId(userId: string): Promise<ConversationWithStats[]> {
     const result = await query(
@@ -47,7 +47,7 @@ export class ConversationModel {
          LIMIT 1) as last_message
        FROM conversations c
        LEFT JOIN chat_logs cl ON cl.conversation_id = c.id
-       WHERE c.user_id = $1 AND c.deleted_at IS NULL AND c.archived_at IS NULL
+       WHERE c.user_id = $1 AND c.deleted_at IS NULL
        GROUP BY c.id
        ORDER BY c.last_message_at DESC`,
       [userId]

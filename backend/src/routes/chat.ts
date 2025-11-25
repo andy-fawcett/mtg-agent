@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { ChatService } from '../services/chatService';
 import { requireAuth, optionalAuth } from '../middleware/auth';
-import { ipRateLimit, userRateLimit, budgetCheck, tokenBudgetCheck } from '../middleware/rateLimit';
+import { ipRateLimit, budgetCheck, tokenBudgetCheck } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { ChatSchema } from '../validation/schemas';
-import { CONVERSATION_LIMITS } from '../config/limits';
+import { getConversationLimits } from '../config/limits';
 
 const router = Router();
 
@@ -14,29 +14,30 @@ const router = Router();
  *
  * Middleware chain:
  * 1. ipRateLimit - Rate limit by IP (10/min)
- * 2. optionalAuth - Load user if authenticated (but allow anonymous)
- * 3. userRateLimit - Rate limit by user tier or IP
- * 4. tokenBudgetCheck - Check user's daily token limit (NEW Phase 1.7)
- * 5. budgetCheck - Check daily budget limits
- * 6. validate - Validate message format
+ * 2. requireAuth - REQUIRE authentication (no anonymous users)
+ * 3. tokenBudgetCheck - Check user's daily token limit (Phase 1.7)
+ * 4. budgetCheck - Check daily budget limits
+ * 5. validate - Validate message format
  */
 router.post(
   '/',
   ipRateLimit,          // IP-based rate limiting
-  optionalAuth,         // Authentication (optional for anonymous)
-  userRateLimit,        // User/anonymous rate limiting
-  tokenBudgetCheck,     // NEW: Check daily token usage
+  requireAuth,          // REQUIRE authentication (no anonymous users)
+  tokenBudgetCheck,     // Check daily token usage
   budgetCheck,          // Check daily budget
   validate(ChatSchema), // Validate input
   async (req: Request, res: Response) => {
     try {
       const { message, conversationId } = req.body;
 
-      // Get user info
-      const userId = req.user?.id;
-      const userTier = req.user?.tier || 'anonymous';
+      // Get user info (guaranteed to exist due to requireAuth)
+      const userId = req.user!.id;
+      const userTier = req.user!.tier;
 
-      // Check conversation limit if conversationId provided
+      // Get conversation limits from database
+      const conversationLimits = await getConversationLimits();
+
+      // Check conversation exists if conversationId provided
       if (conversationId && userId) {
         const { ConversationModel } = await import('../models/Conversation');
         const conversation = await ConversationModel.getById(conversationId, userId);
@@ -48,18 +49,13 @@ router.post(
           });
         }
 
-        // Check if conversation has hit 150k token limit
-        if (conversation.totalTokens >= CONVERSATION_LIMITS.MAX_TOKENS) {
+        // Block if ALREADY over limit (allow the message that reaches limit)
+        if (conversation.totalTokens >= conversationLimits.MAX_TOKENS) {
           return res.status(400).json({
             error: 'conversation_limit_reached',
             message: 'This conversation has reached its maximum length.',
             conversationTokens: conversation.totalTokens,
-            maxTokens: CONVERSATION_LIMITS.MAX_TOKENS,
-            action: {
-              type: 'summarize_required',
-              endpoint: `/api/conversations/${conversationId}/summarize-and-continue`,
-              buttonText: 'Summarize & Start New Chat',
-            },
+            maxTokens: conversationLimits.MAX_TOKENS,
           });
         }
       }
@@ -72,15 +68,38 @@ router.post(
         conversationId,
       });
 
+      // Check if conversation NOW exceeds limit (after this message)
+      let limitReached = false;
+      let totalTokens = 0;
+      if (response.conversationId && userId) {
+        const { ConversationModel } = await import('../models/Conversation');
+        const updatedConversation = await ConversationModel.getById(response.conversationId, userId);
+        if (updatedConversation) {
+          totalTokens = updatedConversation.totalTokens;
+          limitReached = totalTokens >= conversationLimits.MAX_TOKENS;
+
+          // Archive conversation immediately when limit is reached
+          if (limitReached) {
+            await ConversationModel.archive(response.conversationId);
+          }
+        }
+      }
+
       // Success response
       res.status(200).json({
         response: response.response,
-        conversationId: response.conversationId,  // NEW: Return conversation ID
+        conversationId: response.conversationId,
         metadata: {
           tokensUsed: response.tokensUsed,
           model: response.model,
           costCents: response.costCents,
         },
+        // Conversation limit info (if applicable)
+        ...(limitReached && {
+          conversationLimitReached: true,
+          conversationTokens: totalTokens,
+          maxTokens: conversationLimits.MAX_TOKENS,
+        }),
       });
     } catch (error: any) {
       // Write error to file for debugging
@@ -169,17 +188,27 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { ChatLogModel } = await import('../models/ChatLog');
+      const { UserDailyTokensModel } = await import('../models/UserDailyTokens');
+      const { getTierLimits } = await import('../config/limits');
 
-      const [todayCount, successRate] = await Promise.all([
+      const [todayCount, successRate, tokensUsedToday] = await Promise.all([
         ChatLogModel.getTodayRequestCount(req.user!.id),
         ChatLogModel.getSuccessRate(req.user!.id),
+        UserDailyTokensModel.getTodayUsage(req.user!.id),
       ]);
+
+      // Get tier limits (async function - must await)
+      const limits = await getTierLimits(req.user!.tier);
 
       res.json({
         stats: {
           todayRequests: todayCount,
           successRate: successRate.toFixed(2),
           tier: req.user!.tier,
+          tokensUsed: tokensUsedToday,
+          tokensLimit: limits.tokensPerDay,
+          tokensRemaining: Math.max(0, limits.tokensPerDay - tokensUsedToday),
+          tokensPercentUsed: Math.min(100, ((tokensUsedToday / limits.tokensPerDay) * 100).toFixed(1)),
         },
       });
     } catch (error) {

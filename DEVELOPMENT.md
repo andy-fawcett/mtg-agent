@@ -7,7 +7,7 @@ Quick reference for developers working on MTG Agent.
 ### Start Everything
 
 ```bash
-./start-dev.sh
+./dev.sh start
 ```
 
 This starts:
@@ -19,8 +19,23 @@ This starts:
 ### Stop Everything
 
 ```bash
-./stop-dev.sh
+./dev.sh stop
 ```
+
+### Quick Restart (Fast Development)
+
+```bash
+# Restart just backend (~5 seconds)
+./dev.sh restart-backend
+
+# Restart just frontend (~10 seconds)
+./dev.sh restart-frontend
+
+# Restart both
+./dev.sh restart
+```
+
+For more details, see [DEV_GUIDE.md](DEV_GUIDE.md).
 
 ### Access the Application
 
@@ -54,8 +69,8 @@ mtg-agent/
 │   └── reference/       # Architecture docs
 │
 ├── docker-compose.yml   # Docker services
-├── start-dev.sh         # Start development environment
-└── stop-dev.sh          # Stop development environment
+├── dev.sh               # Development environment manager
+└── DEV_GUIDE.md         # Detailed dev.sh usage guide
 ```
 
 ---
@@ -212,12 +227,13 @@ pnpm install
 
 ## 🔄 Development Workflow
 
-1. **Start services:** `./start-dev.sh`
+1. **Start services:** `./dev.sh start`
 2. **Make changes** to code
-3. **Test changes** in browser (http://localhost:3001)
-4. **Check logs** if issues occur
-5. **Commit changes** when ready
-6. **Stop services:** `./stop-dev.sh` (when done)
+3. **Quick restart if needed:** `./dev.sh restart-backend` or `./dev.sh restart-frontend`
+4. **Test changes** in browser (http://localhost:3001)
+5. **Check logs** if issues occur: `./dev.sh logs`
+6. **Commit changes** when ready
+7. **Stop services:** `./dev.sh stop` (when done)
 
 ---
 

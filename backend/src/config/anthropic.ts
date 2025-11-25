@@ -2,7 +2,6 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929';
-const MAX_TOKENS = parseInt(process.env.ANTHROPIC_MAX_TOKENS || '2000');
 
 // Validate API key presence
 if (!API_KEY) {
@@ -28,13 +27,12 @@ export const anthropic = new Anthropic({
 
 /**
  * Claude configuration constants
+ * Note: max_tokens is now tier-based and configured in system_config table
  */
 export const CLAUDE_CONFIG = {
   model: MODEL,
-  defaultMaxTokens: MAX_TOKENS,
   temperature: 0.7, // Balanced between creativity and consistency
 } as const;
 
 console.log('✓ Anthropic SDK initialized');
 console.log(`  Model: ${CLAUDE_CONFIG.model}`);
-console.log(`  Max Tokens: ${CLAUDE_CONFIG.defaultMaxTokens}`);

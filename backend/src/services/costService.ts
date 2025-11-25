@@ -1,5 +1,6 @@
 import { DailyCostModel } from '../models/DailyCost';
 import { redisClient } from '../config/redis';
+import { getBudgetConfig } from '../config/limits';
 
 // Claude Pricing (as of September 2025)
 const PRICING = {
@@ -43,17 +44,19 @@ export class CostService {
   /**
    * Check if adding this cost would exceed daily budget
    * Returns false if request would exceed budget
+   * Budget loaded from database dynamically
    */
   static async canAffordRequest(estimatedCostCents: number): Promise<boolean> {
-    const dailyBudget = parseInt(process.env.DAILY_BUDGET_CENTS || '100');
+    const budgetConfig = await getBudgetConfig();
     const today = await DailyCostModel.getToday();
 
-    return (today.total_cost_cents + estimatedCostCents) <= dailyBudget;
+    return (today.total_cost_cents + estimatedCostCents) <= budgetConfig.DAILY_BUDGET_CENTS;
   }
 
   /**
    * Get current budget status
    * Returns used amount, limit, remaining, and percentage used
+   * Budget loaded from database dynamically
    */
   static async getBudgetStatus(): Promise<{
     used: number;
@@ -61,16 +64,16 @@ export class CostService {
     remaining: number;
     percentUsed: number;
   }> {
-    const dailyBudget = parseInt(process.env.DAILY_BUDGET_CENTS || '100');
+    const budgetConfig = await getBudgetConfig();
     const today = await DailyCostModel.getToday();
 
     const used = today.total_cost_cents;
-    const remaining = Math.max(0, dailyBudget - used);
-    const percentUsed = (used / dailyBudget) * 100;
+    const remaining = Math.max(0, budgetConfig.DAILY_BUDGET_CENTS - used);
+    const percentUsed = (used / budgetConfig.DAILY_BUDGET_CENTS) * 100;
 
     return {
       used,
-      limit: dailyBudget,
+      limit: budgetConfig.DAILY_BUDGET_CENTS,
       remaining,
       percentUsed,
     };
@@ -78,15 +81,16 @@ export class CostService {
 
   /**
    * Check budget and send alerts if needed
-   * Alerts at configurable thresholds (default: 50%, 75%, 90%)
+   * Alerts at configurable thresholds loaded from database
    */
   static async checkBudgetAlerts(): Promise<void> {
     const status = await this.getBudgetStatus();
+    const budgetConfig = await getBudgetConfig();
 
     const thresholds = [
-      parseInt(process.env.COST_ALERT_THRESHOLD_1 || '50'),
-      parseInt(process.env.COST_ALERT_THRESHOLD_2 || '75'),
-      parseInt(process.env.COST_ALERT_THRESHOLD_3 || '90'),
+      budgetConfig.ALERT_THRESHOLD_1,
+      budgetConfig.ALERT_THRESHOLD_2,
+      budgetConfig.ALERT_THRESHOLD_3,
     ];
 
     for (const threshold of thresholds) {

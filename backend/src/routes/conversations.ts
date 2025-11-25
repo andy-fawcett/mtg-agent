@@ -75,6 +75,16 @@ router.get('/:id', async (req: Request, res: Response) => {
     // Get all messages in the conversation
     const messages = await ChatLogModel.getByConversationId(id);
 
+    // Get conversation limits to include in response
+    const { getConversationLimits } = await import('../config/limits');
+    const limits = await getConversationLimits();
+
+    console.log('GET /api/conversations/:id - conversation object:', {
+      id: conversation.id,
+      archivedAt: conversation.archivedAt,
+      deletedAt: conversation.deletedAt,
+    });
+
     res.json({
       success: true,
       conversation,
@@ -86,6 +96,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         tokensUsed: msg.tokens_used,
         actualCostCents: msg.actual_cost_cents,
       })),
+      maxTokens: limits.MAX_TOKENS, // Include current max tokens limit
     });
   } catch (error) {
     console.error('Failed to fetch conversation:', error);
@@ -240,6 +251,23 @@ router.post('/:id/summarize-and-continue', async (req: Request, res: Response) =
 
     // Store summary context
     await ConversationModel.setSummaryContext(newConversation.id, summary);
+
+    // Create the summary as the first message in the new conversation (assistant message only)
+    const summaryMessage = `📋 **Conversation Summary**\n\n${summary}\n\n---\n\n*This is a continuation of a previous conversation. The context above summarizes what we discussed.*`;
+
+    await ChatLogModel.create({
+      user_id: req.user!.id,
+      conversation_id: newConversation.id,
+      user_message: '', // Empty user message - summary is just from assistant
+      assistant_response: summaryMessage,
+      message_length: 0,
+      response_length: summaryMessage.length,
+      input_tokens: 0,
+      output_tokens: 0,
+      tokens_used: 0,
+      actual_cost_cents: 0,
+      success: true,
+    });
 
     // Archive old conversation
     await ConversationModel.archive(id);
