@@ -1,16 +1,16 @@
 # MTG Agent - Project Status
 
-**Last Updated:** 2025-11-24
-**Current Phase:** Phase 1 (MVP) - Phase 1.7 Complete (100%)
-**Current Task:** Phase 1.8 - Admin Dashboard (Next)
-**Overall Progress:** 70% implementation (7/10 sub-phases complete)
+**Last Updated:** 2025-12-12
+**Current Phase:** Phase 1 (MVP) - Phase 1.8 Complete (100%)
+**Current Task:** Phase 1.9 - Testing (Next)
+**Overall Progress:** 80% implementation (8/10 sub-phases complete)
 
 ---
 
 ## 📊 Phase Progress Overview
 
 ### Phase 1: MVP - Internal Use Only
-**Target:** 4 weeks (68-90 hours) | **Status:** 🚀 In Progress | **Progress:** 60%
+**Target:** 4 weeks (68-90 hours) | **Status:** 🚀 In Progress | **Progress:** 80%
 
 - [x] **Phase 1.0: Foundation** (4-6 hours) - ✅ Complete
   - Project structure, TypeScript, Docker, Express server
@@ -47,8 +47,15 @@
   - ✅ Config: All rate limits and budgets in database (system_config table)
   - ✅ Testing: Comprehensive automated tests completed (Phase 1.7 test results documented)
 
-- [ ] **Phase 1.8: Admin Dashboard** (8-10 hours) - ⏸️ Not Started
-  - Role-based admin panel for user management, analytics, monitoring, configuration
+- [x] **Phase 1.8: Admin Dashboard** (8-10 hours) - ✅ Complete (100%)
+  - ✅ Backend: Admin role support, middleware, 13 admin API endpoints
+  - ✅ Backend: Activity/audit logging system with JSONB details
+  - ✅ Backend: Top users analytics, system alerts, emergency mode
+  - ✅ Frontend: Admin layout with protected routes and role checking
+  - ✅ Frontend: User management, analytics, monitoring, activity log pages
+  - ✅ Frontend: System configuration display (read-only)
+  - ✅ Config: Next.js API proxy for backend integration
+  - ✅ Testing: All admin endpoints verified working with curl
 
 - [ ] **Phase 1.9: Testing** (6-8 hours) - ⏸️ Not Started
   - Integration tests, security tests, load tests
@@ -69,33 +76,31 @@
 
 ## 🎯 Current Session
 
-**Completed:** Phase 1.7 - Chat Sessions & Conversation History ✅
+**Completed:** Phase 1.8 - Admin Dashboard ✅
 
-**Next Up:** Phase 1.8 - Admin Dashboard
+**Next Up:** Phase 1.9 - Testing
 
-**What Phase 1.7 Delivered:**
-- ✅ Conversations table for organizing chats with token tracking
-- ✅ Multiple conversation threads per user
-- ✅ Persistent chat history with message content
-- ✅ Sidebar with conversation list (authenticated users only)
-- ✅ Switch between conversations with full message loading
-- ✅ Delete conversations functionality
-- ✅ Auto-generate conversation titles from first message
-- ✅ Daily token tracking per user across all conversations
-- ✅ 150k token limit per conversation with summarization
-- ✅ "Summarize & Continue" feature with Claude-generated summaries
+**What Phase 1.8 Delivered:**
+- ✅ Role-based authentication with admin middleware
+- ✅ Admin dashboard with 6-page navigation
+- ✅ User management (view, update tiers, soft delete)
+- ✅ Usage analytics (overview, trends, top users)
+- ✅ System monitoring (health checks, alerts, emergency mode)
+- ✅ Activity/audit log for all admin actions
+- ✅ Configuration management (view system config)
+- ✅ Quick actions panel (emergency mode, cache flush)
+- ✅ System alerts with badge notifications
+- ✅ 13 fully functional admin API endpoints
 
-**Time Spent:** ~4 hours (frontend implementation)
+**Time Spent:** ~8 hours (full implementation)
 
-**What Phase 1.8 Includes:**
-- Role-based authentication (admin users)
-- Admin dashboard with navigation
-- User management (change tiers, delete users)
-- Usage analytics (costs, tokens, trends)
-- System monitoring (health checks, error logs)
-- Configuration management (rate limits, budgets)
+**What Phase 1.9 Includes:**
+- Integration tests for all API endpoints
+- Security tests (auth, rate limiting, input validation)
+- Load tests (concurrent users, rate limits)
+- End-to-end tests (user flows)
 
-**Time Estimate:** 8-10 hours
+**Time Estimate:** 6-8 hours
 
 **Documentation:**
 - `docs/implementation/PHASE_1_MVP/PHASE_1.6_FRONTEND.md` ✅
@@ -113,6 +118,101 @@ None currently.
 
 ## 📝 Recent Activity
 
+- **2025-12-12:** 🔧 Phase 1.8 Post-Implementation Fixes & Enhancements
+  - **Conversation Warning System:**
+    - Migrated from fixed `conversation.warning_tokens` to percentage-based `conversation.warning_percentage` (80%)
+    - Updated `getConversationLimits()` to calculate WARNING_TOKENS dynamically from percentage
+    - Added warning status to `/api/chat` response for real-time frontend updates
+    - Implemented amber warning banner at 80% conversation limit (frontend/app/chat/page.tsx:385-400)
+    - Changed limit banner from yellow to RED at 100% for better visual distinction
+    - Fixed input form to disable when conversation reaches 100% limit
+    - Fixed warning state not clearing when starting new conversation
+    - Added debug logging to track conversation token calculations
+  - **Enterprise Tier Support:**
+    - Added 'enterprise' to backend tier validation (backend/src/routes/admin.ts:104)
+    - Added enterprise option to admin user management dropdown (frontend/app/admin/users/page.tsx:213)
+    - Enterprise tier now saves correctly (was previously rejected by backend)
+  - **Anonymous User Removal:**
+    - Removed 'anonymous' from UserTier type definition (backend/src/types/database.types.ts:2)
+    - Updated budgetCheck middleware to require authentication (no anonymous fallback)
+    - Removed anonymous tier from requireTier middleware tierLevels
+    - Added validation to reject invalid tiers instead of defaulting to 0
+    - Updated frontend chat page to remove "Anonymous users get 3 messages" text
+    - Removed "Try as anonymous" link from login page (frontend/app/login/page.tsx)
+    - System now requires authentication for all chat functionality
+  - **User Management Enhancements:**
+    - Added user suspension feature with session termination
+    - Migration 010: Added suspended column to users table
+    - Created suspend/unsuspend endpoints with activity logging
+    - Fixed suspension check in authService to block login BEFORE session creation
+    - Added Status column to admin users table with Active/Suspended badges
+    - Created role management with admin promotion/demotion
+    - Migration 009: Created default admin account (admin@mtgagent.com)
+    - Added PATCH /api/admin/users/:id/role endpoint with activity logging
+  - **Configuration Cleanup:**
+    - Simplified budget alerts from 3 thresholds (50%, 75%, 90%) to single warning (80%)
+    - Updated migration 006 to use single budget.warning_threshold
+    - Updated costService.ts to use single threshold with Redis flag for one-time alert
+  - **Bug Fixes:**
+    - Fixed conversation warning showing at 8% instead of 80% (was config issue)
+    - Fixed warning banner persisting after clicking "New Chat"
+    - Fixed enterprise tier not saving (backend validation was missing it)
+    - Fixed status column not showing in admin users table (backend wasn't returning suspended field)
+    - Fixed suspended users able to briefly login before being kicked (security issue)
+  - **Testing:**
+    - All admin endpoints verified working
+    - Conversation warning system tested at 80% and 100%
+    - Enterprise tier assignment tested and working
+    - User suspension tested with session termination
+    - All changes verified in development environment
+  - **Next Steps:** Phase 1.9 - Testing
+
+- **2025-12-11:** ✅ Phase 1.8 Complete - Admin Dashboard with Full Role-Based Access Control
+  - **Backend Implementation:**
+    - Created migration 007: Added role column to users table with check constraint
+    - Created migration 008: Added admin_actions table for audit logging
+    - Created adminAuth middleware (requireAdmin) for route protection
+    - Updated auth middleware to store userRole in session
+    - Created admin router with 13 endpoints (users, analytics, monitoring, config, actions)
+    - Created adminLogger utility for audit trail logging
+    - All admin mutation endpoints log to audit trail with IP and user agent
+  - **Admin API Endpoints:**
+    - GET /api/admin/users - List users with pagination
+    - PATCH /api/admin/users/:id/tier - Update user tier
+    - DELETE /api/admin/users/:id - Soft delete user
+    - GET /api/admin/analytics/overview - System statistics
+    - GET /api/admin/analytics/usage - Usage trends
+    - GET /api/admin/analytics/top-users - Top users by metric
+    - GET /api/admin/monitoring/health - System health check
+    - GET /api/admin/config - Get all system configuration
+    - PATCH /api/admin/config/:key - Update config value
+    - GET /api/admin/activity - Audit log with pagination
+    - GET /api/admin/alerts - System alerts
+    - POST /api/admin/actions/emergency-mode - Toggle emergency mode
+    - POST /api/admin/actions/flush-cache - Flush Redis cache
+  - **Frontend Implementation:**
+    - Created AdminNav component with 6 routes and alert badge
+    - Created admin layout with role-based authentication check
+    - Created admin overview page with stats, alerts, and top users
+    - Created user management page with tier updates and delete
+    - Created analytics page (stub for future implementation)
+    - Created monitoring page with system health display
+    - Created activity log page with audit trail table
+    - Created config page with read-only config display
+  - **Configuration Fixes:**
+    - Fixed /api/auth/me endpoint to include role field
+    - Added Next.js API rewrites to proxy /api/* to backend
+    - Removed invalid devtools config option
+  - **Development Notes:**
+    - Updated /start command with dev.sh usage instructions
+    - Established dev.sh as standard for all server operations
+    - Fixed multiple zombie server process issues
+  - **Testing:**
+    - All 13 admin endpoints tested with curl
+    - Authentication flow verified working
+    - Admin role checking verified
+    - API proxy configuration verified
+  - **Next Steps:** Phase 1.9 - Testing
 - **2025-11-24:** ✅ Phase 1.7 Final Fixes & Testing - Frontend Integration Complete
   - **Bug Fixes:**
     - Fixed archived conversation property mismatch (archived_at vs archivedAt)

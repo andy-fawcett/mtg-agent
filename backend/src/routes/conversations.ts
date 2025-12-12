@@ -96,7 +96,8 @@ router.get('/:id', async (req: Request, res: Response) => {
         tokensUsed: msg.tokens_used,
         actualCostCents: msg.actual_cost_cents,
       })),
-      maxTokens: limits.MAX_TOKENS, // Include current max tokens limit
+      maxTokens: limits.MAX_TOKENS, // Hard limit (100%)
+      warningTokens: limits.WARNING_TOKENS, // Warning threshold (80% by default)
     });
   } catch (error) {
     console.error('Failed to fetch conversation:', error);

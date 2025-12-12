@@ -73,8 +73,17 @@ export async function budgetCheck(
   next: NextFunction
 ): Promise<void> {
   try {
+    // Require authenticated user (should be guaranteed by requireAuth middleware)
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Authentication required',
+        message: 'User must be authenticated to access this resource',
+      });
+      return;
+    }
+
     // Get user's tier limits from database
-    const tier = req.user?.tier || 'anonymous';
+    const tier = req.user.tier;
     const limits = await getTierLimits(tier);
 
     // Estimate cost for this request

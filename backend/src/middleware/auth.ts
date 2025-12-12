@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserModel } from '../models/User';
-import { User } from '../types/database.types';
+import { User, UserRole } from '../types/database.types';
+import 'express-session';
 
 // Extend Express Request to include user information
 declare global {
@@ -9,6 +10,14 @@ declare global {
       user?: User;
       userId?: string;
     }
+  }
+}
+
+// Extend Express Session to include userRole
+declare module 'express-session' {
+  interface SessionData {
+    userId?: string;
+    userRole?: UserRole;
   }
 }
 
@@ -44,9 +53,25 @@ export async function requireAuth(
       return;
     }
 
+    // Check if user is suspended
+    if (user.suspended) {
+      // Destroy session for suspended users
+      req.session.destroy(() => {});
+      res.status(403).json({
+        error: 'Account suspended',
+        message: 'Your account has been suspended. Please contact support.',
+      });
+      return;
+    }
+
     // Attach user to request for use in route handlers
     req.user = user;
     req.userId = user.id;
+
+    // Store role in session for quick access (used by admin middleware)
+    if (req.session) {
+      req.session.userRole = user.role;
+    }
 
     next();
   } catch (error: any) {
@@ -91,7 +116,6 @@ export async function optionalAuth(
  */
 export function requireTier(minimumTier: 'free' | 'premium' | 'enterprise') {
   const tierLevels = {
-    anonymous: 0,
     free: 1,
     premium: 2,
     enterprise: 3,
@@ -106,8 +130,18 @@ export function requireTier(minimumTier: 'free' | 'premium' | 'enterprise') {
       return;
     }
 
-    const userLevel = tierLevels[req.user.tier as keyof typeof tierLevels] || 0;
+    const userLevel = tierLevels[req.user.tier as keyof typeof tierLevels];
     const requiredLevel = tierLevels[minimumTier];
+
+    // If user has invalid tier, reject
+    if (!userLevel) {
+      res.status(400).json({
+        error: 'Invalid user tier',
+        message: 'User has invalid tier assigned',
+        currentTier: req.user.tier,
+      });
+      return;
+    }
 
     if (userLevel < requiredLevel) {
       res.status(403).json({

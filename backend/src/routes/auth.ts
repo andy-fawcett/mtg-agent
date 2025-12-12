@@ -130,6 +130,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
       id: req.user!.id,
       email: req.user!.email,
       tier: req.user!.tier,
+      role: req.user!.role,
       emailVerified: req.user!.email_verified,
       createdAt: req.user!.created_at,
     },

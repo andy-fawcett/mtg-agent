@@ -36,14 +36,12 @@ INSERT INTO system_config (key, value, description, category, value_type) VALUES
 ('rate_limit.enterprise.max_output_tokens', '8000', 'Max output tokens per request for enterprise users', 'rate_limits', 'number'),
 
 -- Budget Controls
-('budget.daily_cents', '100', 'Daily budget limit in cents ($1.00)', 'budgets', 'number'),
-('budget.alert_threshold_1', '50', 'First alert threshold (percentage)', 'budgets', 'number'),
-('budget.alert_threshold_2', '75', 'Second alert threshold (percentage)', 'budgets', 'number'),
-('budget.alert_threshold_3', '90', 'Third alert threshold (percentage)', 'budgets', 'number'),
+('budget.daily_cents', '100', 'Daily budget hard limit in cents. Requests blocked at 100% of this amount.', 'budgets', 'number'),
+('budget.warning_threshold', '80', 'Warning threshold percentage (1-99). Alert when daily budget reaches this percentage.', 'budgets', 'number'),
 
 -- Conversation Limits
 ('conversation.max_tokens', '150000', 'Max tokens per conversation before requiring summarization', 'conversation', 'number'),
-('conversation.warning_tokens', '120000', 'Warning threshold for conversation length (not enforced)', 'conversation', 'number')
+('conversation.warning_percentage', '80', 'Warning threshold percentage (1-99). Show yellow banner when conversation reaches this % of max_tokens.', 'conversation', 'number')
 
 ON CONFLICT (key) DO NOTHING;
 

@@ -7,9 +7,14 @@ const nextConfig: NextConfig = {
     buildActivity: false,
     buildActivityPosition: 'bottom-right',
   },
-  // Disable the new Next.js 16 devtools
-  devtools: {
-    enabled: false,
+  // Proxy API calls to backend
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:3000/api/:path*',
+      },
+    ];
   },
 };
 

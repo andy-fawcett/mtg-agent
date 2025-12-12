@@ -1,7 +1,7 @@
 # Phase 1.8: Admin Dashboard
 
 **Status:** ⏸️ Not Started
-**Duration Estimate:** 8-10 hours
+**Duration Estimate:** 11-13 hours (expanded from 8-10 hours with enhanced features)
 **Prerequisites:** Phase 1.7 complete (chat sessions working)
 **Dependencies:** Role-based authentication, admin API endpoints
 
@@ -9,6 +9,7 @@
 
 Build a comprehensive admin dashboard for managing the MTG Agent application.
 
+**Core Features:**
 - Role-based access control (admin users only)
 - User management (view, modify tiers, ban/delete)
 - Usage analytics (chat logs, costs, token usage)
@@ -16,9 +17,15 @@ Build a comprehensive admin dashboard for managing the MTG Agent application.
 - Configuration management (rate limits, budgets, thresholds)
 - Responsive admin UI
 
+**Enhanced Features (Added):**
+- **Activity/Audit Log** - Track all admin actions with details
+- **Top Users Analytics** - Identify power users by cost, tokens, or conversations
+- **System Alerts** - Proactive monitoring with budget/error/health alerts
+- **Quick Actions** - Emergency mode toggle and cache flush capabilities
+
 ---
 
-## Task 1.7.1: Backend - Admin Role Support
+## Task 1.8.1: Backend - Admin Role Support
 
 **Estimated Time:** 90 minutes
 
@@ -34,7 +41,7 @@ Add role-based authentication to support admin users.
 cd backend
 ```
 
-**Create `backend/src/db/migrations/005_add_user_roles.sql`:**
+**Create `backend/migrations/007_add_user_roles.sql`:**
 
 ```sql
 -- Add role column to users table
@@ -58,7 +65,7 @@ WHERE id = (SELECT id FROM users ORDER BY created_at LIMIT 1);
 **Run migration:**
 
 ```bash
-psql $DATABASE_URL -f src/db/migrations/005_add_user_roles.sql
+psql $DATABASE_URL -f migrations/007_add_user_roles.sql
 ```
 
 **2. Update User model:**
@@ -153,7 +160,7 @@ declare module 'express-session' {
 
 ```bash
 # Run migration
-psql $DATABASE_URL -f src/db/migrations/005_add_user_roles.sql
+psql $DATABASE_URL -f migrations/007_add_user_roles.sql
 
 # Restart server
 pnpm run dev
@@ -174,7 +181,7 @@ curl -X GET http://localhost:3000/api/auth/me \
 
 ---
 
-## Task 1.7.2: Backend - Admin API Endpoints
+## Task 1.8.2: Backend - Admin API Endpoints
 
 **Estimated Time:** 120 minutes
 
@@ -409,33 +416,58 @@ router.get('/monitoring/health', async (req, res) => {
 });
 
 /**
- * GET /api/admin/config/rate-limits
- * Get current rate limit configuration
+ * GET /api/admin/config
+ * Get current system configuration from database
  */
-router.get('/config/rate-limits', async (req, res) => {
+router.get('/config', async (req, res) => {
   try {
-    // Return current rate limit settings from environment
+    const { category } = req.query;
+
+    let query = 'SELECT * FROM system_config';
+    const params: any[] = [];
+
+    if (category) {
+      query += ' WHERE category = $1';
+      params.push(category);
+    }
+
+    query += ' ORDER BY category, key';
+
+    const result = await pool.query(query, params);
+
     res.json({
       success: true,
-      config: {
-        anonymous: {
-          dailyLimit: parseInt(process.env.RATE_LIMIT_ANONYMOUS || '3'),
-          perMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE || '10'),
-        },
-        free: {
-          dailyLimit: parseInt(process.env.RATE_LIMIT_FREE || '50'),
-        },
-        premium: {
-          dailyLimit: parseInt(process.env.RATE_LIMIT_PREMIUM || '500'),
-        },
-        budget: {
-          dailyCapCents: parseInt(process.env.DAILY_BUDGET_CAP_CENTS || '1000'),
-        },
-      },
+      config: result.rows,
     });
   } catch (error) {
     console.error('Failed to fetch config:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch config' });
+  }
+});
+
+/**
+ * PATCH /api/admin/config/:key
+ * Update a configuration value
+ */
+router.patch('/config/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    const userId = req.session.userId;
+
+    if (!value) {
+      return res.status(400).json({ success: false, message: 'Value is required' });
+    }
+
+    await pool.query(
+      'UPDATE system_config SET value = $1, updated_by = $2 WHERE key = $3',
+      [value, userId, key]
+    );
+
+    res.json({ success: true, message: 'Configuration updated' });
+  } catch (error) {
+    console.error('Failed to update config:', error);
+    res.status(500).json({ success: false, message: 'Failed to update config' });
   }
 });
 
@@ -481,7 +513,7 @@ curl -X GET http://localhost:3000/api/admin/monitoring/health \
 
 ---
 
-## Task 1.7.3: Frontend - Admin Dashboard Layout
+## Task 1.8.3: Frontend - Admin Dashboard Layout
 
 **Estimated Time:** 90 minutes
 
@@ -686,7 +718,7 @@ export default function AdminOverview() {
 
 ---
 
-## Task 1.7.4: Frontend - User Management Page
+## Task 1.8.4: Frontend - User Management Page
 
 **Estimated Time:** 90 minutes
 
@@ -839,7 +871,564 @@ export default function AdminUsers() {
 
 ---
 
-## Task 1.7.5: Frontend - Analytics, Monitoring, Config Pages
+## Task 1.8.5: Backend - Activity Log & Top Users
+
+**Estimated Time:** 60 minutes
+
+### Objectives
+
+Create audit log for admin actions and endpoints for top users by usage/cost.
+
+### Steps
+
+**1. Create admin_actions table migration:**
+
+**Create `backend/migrations/008_add_admin_actions.sql`:**
+
+```sql
+-- Admin Actions Audit Log
+CREATE TABLE IF NOT EXISTS admin_actions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  admin_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action_type VARCHAR(50) NOT NULL,  -- 'user_tier_change', 'user_delete', 'config_update', etc.
+  target_type VARCHAR(50),  -- 'user', 'config', 'system'
+  target_id VARCHAR(255),   -- ID of affected resource
+  details JSONB,            -- Additional context (old_value, new_value, etc.)
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_admin_actions_admin_id ON admin_actions(admin_id);
+CREATE INDEX idx_admin_actions_created_at ON admin_actions(created_at DESC);
+CREATE INDEX idx_admin_actions_action_type ON admin_actions(action_type);
+```
+
+**Run migration:**
+
+```bash
+psql $DATABASE_URL -f migrations/008_add_admin_actions.sql
+```
+
+**2. Create helper function for logging admin actions:**
+
+**Create `backend/src/utils/adminLogger.ts`:**
+
+```typescript
+import { pool } from '../config/database';
+
+interface LogAdminActionParams {
+  adminId: string;
+  actionType: string;
+  targetType?: string;
+  targetId?: string;
+  details?: Record<string, any>;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export async function logAdminAction(params: LogAdminActionParams): Promise<void> {
+  const {
+    adminId,
+    actionType,
+    targetType,
+    targetId,
+    details,
+    ipAddress,
+    userAgent,
+  } = params;
+
+  try {
+    await pool.query(
+      `INSERT INTO admin_actions
+       (admin_id, action_type, target_type, target_id, details, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        adminId,
+        actionType,
+        targetType || null,
+        targetId || null,
+        details ? JSON.stringify(details) : null,
+        ipAddress || null,
+        userAgent || null,
+      ]
+    );
+  } catch (error) {
+    console.error('Failed to log admin action:', error);
+    // Don't throw - logging failures shouldn't break admin operations
+  }
+}
+```
+
+**3. Update admin routes to log actions:**
+
+**Update `backend/src/routes/admin.ts`:**
+
+```typescript
+import { logAdminAction } from '../utils/adminLogger';
+
+// In PATCH /api/admin/users/:id/tier
+router.patch('/users/:id/tier', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tier } = req.body;
+    const adminId = req.session.userId!;
+
+    if (!['free', 'premium'].includes(tier)) {
+      return res.status(400).json({ success: false, message: 'Invalid tier' });
+    }
+
+    // Get old tier for logging
+    const userResult = await pool.query('SELECT tier, email FROM users WHERE id = $1', [id]);
+    const oldTier = userResult.rows[0]?.tier;
+    const email = userResult.rows[0]?.email;
+
+    await pool.query(
+      'UPDATE users SET tier = $1, updated_at = NOW() WHERE id = $2',
+      [tier, id]
+    );
+
+    // Log the action
+    await logAdminAction({
+      adminId,
+      actionType: 'user_tier_change',
+      targetType: 'user',
+      targetId: id,
+      details: { email, oldTier, newTier: tier },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({ success: true, message: 'Tier updated' });
+  } catch (error) {
+    console.error('Failed to update tier:', error);
+    res.status(500).json({ success: false, message: 'Failed to update tier' });
+  }
+});
+
+// In DELETE /api/admin/users/:id
+router.delete('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.session.userId!;
+
+    if (id === adminId) {
+      return res.status(400).json({ success: false, message: 'Cannot delete your own account' });
+    }
+
+    // Get user email for logging
+    const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [id]);
+    const email = userResult.rows[0]?.email;
+
+    await User.delete(id);
+
+    // Log the action
+    await logAdminAction({
+      adminId,
+      actionType: 'user_delete',
+      targetType: 'user',
+      targetId: id,
+      details: { email },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({ success: true, message: 'User deleted' });
+  } catch (error) {
+    console.error('Failed to delete user:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete user' });
+  }
+});
+
+// In PATCH /api/admin/config/:key
+router.patch('/config/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    const adminId = req.session.userId!;
+
+    if (!value) {
+      return res.status(400).json({ success: false, message: 'Value is required' });
+    }
+
+    // Get old value for logging
+    const configResult = await pool.query('SELECT value FROM system_config WHERE key = $1', [key]);
+    const oldValue = configResult.rows[0]?.value;
+
+    await pool.query(
+      'UPDATE system_config SET value = $1, updated_by = $2 WHERE key = $3',
+      [value, adminId, key]
+    );
+
+    // Log the action
+    await logAdminAction({
+      adminId,
+      actionType: 'config_update',
+      targetType: 'config',
+      targetId: key,
+      details: { key, oldValue, newValue: value },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({ success: true, message: 'Configuration updated' });
+  } catch (error) {
+    console.error('Failed to update config:', error);
+    res.status(500).json({ success: false, message: 'Failed to update config' });
+  }
+});
+```
+
+**4. Add activity log endpoint:**
+
+```typescript
+/**
+ * GET /api/admin/activity
+ * Get recent admin actions (audit log)
+ */
+router.get('/activity', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const result = await pool.query(
+      `SELECT
+        aa.*,
+        u.email as admin_email
+       FROM admin_actions aa
+       JOIN users u ON aa.admin_id = u.id
+       ORDER BY aa.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    res.json({
+      success: true,
+      actions: result.rows,
+    });
+  } catch (error) {
+    console.error('Failed to fetch activity log:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch activity log' });
+  }
+});
+```
+
+**5. Add top users endpoint:**
+
+```typescript
+/**
+ * GET /api/admin/analytics/top-users
+ * Get top users by cost, tokens, or conversations
+ */
+router.get('/analytics/top-users', async (req, res) => {
+  try {
+    const metric = req.query.metric || 'cost';
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    let orderBy = 'total_cost DESC';
+    let selectMetric = 'COALESCE(SUM(cl.actual_cost_cents), 0) as total_cost';
+
+    if (metric === 'tokens') {
+      orderBy = 'total_tokens DESC';
+      selectMetric = 'COALESCE(SUM(cl.tokens_used), 0) as total_tokens';
+    } else if (metric === 'conversations') {
+      orderBy = 'conversation_count DESC';
+      selectMetric = 'COUNT(DISTINCT cl.conversation_id) as conversation_count';
+    }
+
+    const result = await pool.query(
+      `SELECT
+        u.id,
+        u.email,
+        u.tier,
+        ${selectMetric},
+        COUNT(cl.id) as total_requests,
+        MAX(cl.created_at) as last_activity
+       FROM users u
+       LEFT JOIN chat_logs cl ON u.id = cl.user_id
+       WHERE u.deleted_at IS NULL
+       GROUP BY u.id, u.email, u.tier
+       ORDER BY ${orderBy}
+       LIMIT $1`,
+      [limit]
+    );
+
+    res.json({
+      success: true,
+      topUsers: result.rows,
+      metric,
+    });
+  } catch (error) {
+    console.error('Failed to fetch top users:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch top users' });
+  }
+});
+```
+
+### Verification
+
+```bash
+# Run migration
+psql $DATABASE_URL -f migrations/008_add_admin_actions.sql
+
+# Restart server
+pnpm run dev
+
+# Test activity log endpoint
+curl -X GET http://localhost:3000/api/admin/activity \
+  -H "Cookie: connect.sid=ADMIN_SESSION_COOKIE"
+
+# Test top users endpoint
+curl -X GET "http://localhost:3000/api/admin/analytics/top-users?metric=cost&limit=10" \
+  -H "Cookie: connect.sid=ADMIN_SESSION_COOKIE"
+```
+
+### Success Criteria
+
+- [ ] admin_actions table created
+- [ ] Admin actions logged automatically
+- [ ] Activity log endpoint returns data
+- [ ] Top users endpoint works (cost, tokens, conversations)
+- [ ] Logging doesn't break admin operations
+
+---
+
+## Task 1.8.6: Backend - System Alerts & Quick Actions
+
+**Estimated Time:** 45 minutes
+
+### Objectives
+
+Add system alert detection and emergency action endpoints.
+
+### Steps
+
+**1. Create alerts endpoint:**
+
+**Add to `backend/src/routes/admin.ts`:**
+
+```typescript
+/**
+ * GET /api/admin/alerts
+ * Get current system alerts
+ */
+router.get('/alerts', async (req, res) => {
+  try {
+    const alerts: Array<{
+      type: string;
+      severity: 'info' | 'warning' | 'critical';
+      message: string;
+      value?: number;
+      threshold?: number;
+    }> = [];
+
+    // Check budget status
+    const budgetResult = await pool.query(
+      `SELECT
+        COALESCE(SUM(total_cost_cents), 0) as total_cost
+       FROM daily_costs
+       WHERE date = CURRENT_DATE`
+    );
+    const costToday = parseInt(budgetResult.rows[0].total_cost);
+
+    const budgetConfig = await pool.query(
+      `SELECT value FROM system_config WHERE key = 'budget.daily_cents'`
+    );
+    const budgetLimit = parseInt(budgetConfig.rows[0]?.value || '100');
+
+    const budgetPercent = (costToday / budgetLimit) * 100;
+
+    if (budgetPercent >= 90) {
+      alerts.push({
+        type: 'budget',
+        severity: 'critical',
+        message: `Budget at ${budgetPercent.toFixed(1)}% of daily limit`,
+        value: costToday,
+        threshold: budgetLimit,
+      });
+    } else if (budgetPercent >= 75) {
+      alerts.push({
+        type: 'budget',
+        severity: 'warning',
+        message: `Budget at ${budgetPercent.toFixed(1)}% of daily limit`,
+        value: costToday,
+        threshold: budgetLimit,
+      });
+    }
+
+    // Check error rate
+    const errorResult = await pool.query(
+      `SELECT
+        COUNT(*) FILTER (WHERE success = false) as errors,
+        COUNT(*) as total
+       FROM chat_logs
+       WHERE created_at >= NOW() - INTERVAL '1 hour'`
+    );
+
+    const errors = parseInt(errorResult.rows[0].errors);
+    const total = parseInt(errorResult.rows[0].total);
+    const errorRate = total > 0 ? (errors / total) * 100 : 0;
+
+    if (errorRate > 5) {
+      alerts.push({
+        type: 'error_rate',
+        severity: 'critical',
+        message: `Error rate at ${errorRate.toFixed(1)}% (last hour)`,
+        value: errorRate,
+        threshold: 5,
+      });
+    } else if (errorRate > 2) {
+      alerts.push({
+        type: 'error_rate',
+        severity: 'warning',
+        message: `Error rate at ${errorRate.toFixed(1)}% (last hour)`,
+        value: errorRate,
+        threshold: 2,
+      });
+    }
+
+    // Check database latency
+    const dbStart = Date.now();
+    await pool.query('SELECT 1');
+    const dbLatency = Date.now() - dbStart;
+
+    if (dbLatency > 500) {
+      alerts.push({
+        type: 'database',
+        severity: 'warning',
+        message: `Database latency high: ${dbLatency}ms`,
+        value: dbLatency,
+        threshold: 500,
+      });
+    }
+
+    res.json({
+      success: true,
+      alerts,
+      count: alerts.length,
+    });
+  } catch (error) {
+    console.error('Failed to fetch alerts:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch alerts' });
+  }
+});
+```
+
+**2. Add quick actions endpoints:**
+
+```typescript
+/**
+ * POST /api/admin/actions/emergency-mode
+ * Enable/disable emergency mode (pauses all non-admin chat)
+ */
+router.post('/actions/emergency-mode', async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const adminId = req.session.userId!;
+
+    // Set all tier limits to 0 (or restore defaults)
+    if (enabled) {
+      await pool.query(`
+        UPDATE system_config
+        SET value = '0'
+        WHERE key LIKE 'rate_limit.%.tokens_per_day'
+      `);
+    } else {
+      // Restore defaults
+      await pool.query(`
+        UPDATE system_config
+        SET value = CASE key
+          WHEN 'rate_limit.free.tokens_per_day' THEN '100000'
+          WHEN 'rate_limit.premium.tokens_per_day' THEN '1000000'
+          WHEN 'rate_limit.enterprise.tokens_per_day' THEN '10000000'
+        END
+        WHERE key LIKE 'rate_limit.%.tokens_per_day'
+      `);
+    }
+
+    // Log the action
+    await logAdminAction({
+      adminId,
+      actionType: 'emergency_mode',
+      targetType: 'system',
+      details: { enabled },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({
+      success: true,
+      message: enabled ? 'Emergency mode enabled' : 'Emergency mode disabled'
+    });
+  } catch (error) {
+    console.error('Failed to toggle emergency mode:', error);
+    res.status(500).json({ success: false, message: 'Failed to toggle emergency mode' });
+  }
+});
+
+/**
+ * POST /api/admin/actions/flush-cache
+ * Flush Redis cache (clear rate limit counters)
+ */
+router.post('/actions/flush-cache', async (req, res) => {
+  try {
+    const adminId = req.session.userId!;
+
+    // Import redis client
+    const redis = require('../config/redis').default;
+
+    // Flush all Redis data (WARNING: also clears sessions)
+    // In production, you might want to be more selective
+    await redis.flushdb();
+
+    // Log the action
+    await logAdminAction({
+      adminId,
+      actionType: 'flush_cache',
+      targetType: 'system',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({ success: true, message: 'Cache flushed successfully' });
+  } catch (error) {
+    console.error('Failed to flush cache:', error);
+    res.status(500).json({ success: false, message: 'Failed to flush cache' });
+  }
+});
+```
+
+### Verification
+
+```bash
+# Test alerts endpoint
+curl -X GET http://localhost:3000/api/admin/alerts \
+  -H "Cookie: connect.sid=ADMIN_SESSION_COOKIE"
+
+# Test emergency mode
+curl -X POST http://localhost:3000/api/admin/actions/emergency-mode \
+  -H "Cookie: connect.sid=ADMIN_SESSION_COOKIE" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+
+# Test cache flush
+curl -X POST http://localhost:3000/api/admin/actions/flush-cache \
+  -H "Cookie: connect.sid=ADMIN_SESSION_COOKIE"
+```
+
+### Success Criteria
+
+- [ ] Alerts endpoint detects budget issues
+- [ ] Alerts endpoint detects high error rates
+- [ ] Alerts endpoint checks database health
+- [ ] Emergency mode toggles rate limits
+- [ ] Cache flush clears Redis
+- [ ] All actions logged to admin_actions
+
+---
+
+## Task 1.8.7: Frontend - Analytics, Monitoring, Config Pages
 
 **Estimated Time:** 120 minutes
 
@@ -866,14 +1455,299 @@ Create the following pages following similar patterns to the user management pag
 
 ---
 
-## Phase 1.7 Completion Checklist
+## Task 1.8.8: Frontend - Activity Log, Top Users, Alerts
+
+**Estimated Time:** 90 minutes
+
+### Objectives
+
+Create UI for activity log, top users, and system alerts.
+
+### Steps
+
+**1. Update AdminNav to show alert badge:**
+
+**Update `frontend/components/AdminNav.tsx`:**
+
+```typescript
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+
+export default function AdminNav() {
+  const pathname = usePathname();
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    loadAlerts();
+    const interval = setInterval(loadAlerts, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  async function loadAlerts() {
+    try {
+      const response = await api.get('/api/admin/alerts');
+      setAlertCount(response.data.count);
+    } catch (error) {
+      console.error('Failed to load alerts:', error);
+    }
+  }
+
+  const navItems = [
+    { href: '/admin', label: 'Overview', icon: '📊' },
+    { href: '/admin/users', label: 'Users', icon: '👥' },
+    { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
+    { href: '/admin/monitoring', label: 'Monitoring', icon: '🔍', badge: alertCount },
+    { href: '/admin/activity', label: 'Activity Log', icon: '📝' },
+    { href: '/admin/config', label: 'Config', icon: '⚙️' },
+  ];
+
+  return (
+    <nav className="bg-gray-800 text-white w-64 min-h-screen p-4">
+      <div className="mb-8">
+        <h2 className="text-xl font-bold">Admin Dashboard</h2>
+        <Link href="/chat" className="text-sm text-gray-400 hover:text-white">
+          ← Back to Chat
+        </Link>
+      </div>
+
+      <ul className="space-y-2">
+        {navItems.map((item) => (
+          <li key={item.href}>
+            <Link
+              href={item.href}
+              className={`block px-4 py-2 rounded-lg hover:bg-gray-700 ${
+                pathname === item.href ? 'bg-gray-700' : ''
+              }`}
+            >
+              <span className="mr-2">{item.icon}</span>
+              {item.label}
+              {item.badge ? (
+                <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                  {item.badge}
+                </span>
+              ) : null}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+```
+
+**2. Create Activity Log page:**
+
+**Create `frontend/app/admin/activity/page.tsx`:**
+
+```typescript
+'use client';
+
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+
+interface AdminAction {
+  id: string;
+  admin_email: string;
+  action_type: string;
+  target_type: string;
+  target_id: string;
+  details: any;
+  created_at: string;
+}
+
+export default function ActivityLog() {
+  const [actions, setActions] = useState<AdminAction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadActions();
+  }, []);
+
+  async function loadActions() {
+    try {
+      const response = await api.get('/api/admin/activity?limit=100');
+      setActions(response.data.actions);
+    } catch (error) {
+      console.error('Failed to load activity log:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function formatAction(action: AdminAction): string {
+    const details = action.details || {};
+
+    switch (action.action_type) {
+      case 'user_tier_change':
+        return `Changed ${details.email}'s tier from ${details.oldTier} to ${details.newTier}`;
+      case 'user_delete':
+        return `Deleted user ${details.email}`;
+      case 'config_update':
+        return `Updated ${details.key} from ${details.oldValue} to ${details.newValue}`;
+      case 'emergency_mode':
+        return `${details.enabled ? 'Enabled' : 'Disabled'} emergency mode`;
+      case 'flush_cache':
+        return 'Flushed Redis cache';
+      default:
+        return action.action_type;
+    }
+  }
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold mb-8">Activity Log</h1>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Timestamp
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Admin
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Action
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {actions.map((action) => (
+              <tr key={action.id}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {new Date(action.created_at).toLocaleString()}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  {action.admin_email}
+                </td>
+                <td className="px-6 py-4 text-sm">
+                  {formatAction(action)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+**3. Update Overview page with Top Users and Alerts:**
+
+**Update `frontend/app/admin/page.tsx`:**
+
+```typescript
+// Add to existing Overview page
+
+const [topUsers, setTopUsers] = useState<any[]>([]);
+const [alerts, setAlerts] = useState<any[]>([]);
+
+useEffect(() => {
+  loadAnalytics();
+  loadTopUsers();
+  loadAlerts();
+}, []);
+
+async function loadTopUsers() {
+  try {
+    const response = await api.get('/api/admin/analytics/top-users?metric=cost&limit=5');
+    setTopUsers(response.data.topUsers);
+  } catch (error) {
+    console.error('Failed to load top users:', error);
+  }
+}
+
+async function loadAlerts() {
+  try {
+    const response = await api.get('/api/admin/alerts');
+    setAlerts(response.data.alerts);
+  } catch (error) {
+    console.error('Failed to load alerts:', error);
+  }
+}
+
+// Add to JSX:
+{alerts.length > 0 && (
+  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8">
+    <div className="flex">
+      <div className="flex-shrink-0">
+        <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+        </svg>
+      </div>
+      <div className="ml-3">
+        <h3 className="text-sm font-medium text-yellow-800">
+          System Alerts ({alerts.length})
+        </h3>
+        <div className="mt-2 text-sm text-yellow-700">
+          <ul className="list-disc list-inside space-y-1">
+            {alerts.map((alert, idx) => (
+              <li key={idx}>{alert.message}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+<div className="bg-white p-6 rounded-lg shadow mb-8">
+  <h3 className="text-lg font-semibold mb-4">Top Users by Cost</h3>
+  <div className="space-y-2">
+    {topUsers.map((user) => (
+      <div key={user.id} className="flex justify-between items-center border-b pb-2">
+        <div>
+          <span className="font-medium">{user.email}</span>
+          <span className="ml-2 text-sm text-gray-500">({user.tier})</span>
+        </div>
+        <div className="text-right">
+          <div className="font-semibold">${(user.total_cost / 100).toFixed(2)}</div>
+          <div className="text-sm text-gray-500">{user.total_requests} requests</div>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+```
+
+**4. Add Quick Actions to Monitoring page:**
+
+Create emergency mode toggle and cache flush buttons on the monitoring page.
+
+### Success Criteria
+
+- [ ] Activity log displays recent actions
+- [ ] Top users shown on overview
+- [ ] Alerts displayed with severity
+- [ ] Alert badge updates in navigation
+- [ ] Quick actions work (emergency mode, cache flush)
+
+---
+
+## Phase 1.8 Completion Checklist
 
 ### Backend
-- [ ] Role column added to users
+- [ ] Role column added to users (migration 007)
 - [ ] Admin middleware created
-- [ ] Admin API endpoints working
+- [ ] Admin API endpoints working (users, analytics, monitoring, config)
 - [ ] Session stores user role
 - [ ] Non-admins blocked from admin routes
+- [ ] **Activity log table created (migration 008)**
+- [ ] **Admin actions automatically logged**
+- [ ] **Top users endpoint (cost, tokens, conversations)**
+- [ ] **System alerts endpoint**
+- [ ] **Emergency mode quick action**
+- [ ] **Cache flush quick action**
 
 ### Frontend
 - [ ] Admin layout with navigation
@@ -881,22 +1755,28 @@ Create the following pages following similar patterns to the user management pag
 - [ ] User management works
 - [ ] Analytics page displays data
 - [ ] Monitoring page shows health
-- [ ] Config page displays settings
+- [ ] Config page displays settings (with update capability)
+- [ ] **Activity log page displays audit trail**
+- [ ] **Top users displayed on overview**
+- [ ] **System alerts shown on overview**
+- [ ] **Alert badge in navigation**
+- [ ] **Quick actions on monitoring page**
 - [ ] Role-based route protection
 
 ### Security
 - [ ] Only admins can access admin routes
 - [ ] Cannot delete own admin account
-- [ ] All admin actions logged
+- [ ] All admin actions logged with details
 - [ ] Session-based authentication
 - [ ] No sensitive data exposed
+- [ ] IP address and user agent tracked in audit log
 
 ## Next Steps
 
 1. ✅ Complete all checklist items
 2. ✅ Test all admin functionality
 3. ✅ Update STATUS.md
-4. ✅ Commit: `feat(admin): complete Phase 1.7`
+4. ✅ Commit: `feat(admin): complete Phase 1.8`
 5. ➡️ Proceed to [Phase 1.9: Testing](PHASE_1.9_TESTING.md)
 
 ---

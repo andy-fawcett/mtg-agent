@@ -80,27 +80,21 @@ export class CostService {
   }
 
   /**
-   * Check budget and send alerts if needed
-   * Alerts at configurable thresholds loaded from database
+   * Check budget and send warning if needed
+   * Single warning at configurable threshold (default 80%)
    */
   static async checkBudgetAlerts(): Promise<void> {
     const status = await this.getBudgetStatus();
     const budgetConfig = await getBudgetConfig();
 
-    const thresholds = [
-      budgetConfig.ALERT_THRESHOLD_1,
-      budgetConfig.ALERT_THRESHOLD_2,
-      budgetConfig.ALERT_THRESHOLD_3,
-    ];
+    // Check if we've hit the warning threshold
+    if (status.percentUsed >= budgetConfig.WARNING_THRESHOLD) {
+      const alerted = await redisClient.get('budget_warning_sent');
 
-    for (const threshold of thresholds) {
-      if (status.percentUsed >= threshold) {
-        const alerted = await redisClient.get(`budget_alert_${threshold}`);
-
-        if (!alerted) {
-          await this.sendBudgetAlert(threshold, status);
-          await redisClient.set(`budget_alert_${threshold}`, '1', 'EX', 86400);
-        }
+      if (!alerted) {
+        await this.sendBudgetAlert(budgetConfig.WARNING_THRESHOLD, status);
+        // Set flag to prevent spam (resets daily)
+        await redisClient.set('budget_warning_sent', '1', 'EX', 86400);
       }
     }
   }

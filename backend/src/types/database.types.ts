@@ -1,11 +1,14 @@
 // User types
-export type UserTier = 'anonymous' | 'free' | 'premium' | 'enterprise';
+export type UserTier = 'free' | 'premium' | 'enterprise';
+export type UserRole = 'user' | 'admin';
 
 export interface User {
   id: string;
   email: string;
   password_hash: string;
   tier: UserTier;
+  role: UserRole;
+  suspended: boolean;
   email_verified: boolean;
   oauth_provider: string | null;
   oauth_id: string | null;

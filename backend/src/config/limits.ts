@@ -49,9 +49,13 @@ export async function getTierLimits(tier: string): Promise<TierLimits> {
  * Get conversation limits
  */
 export async function getConversationLimits() {
+  const maxTokens = await configCache.getNumber('conversation.max_tokens', 150_000, 100, 1_000_000); // 100 - 1M
+  const warningPercentage = await configCache.getNumber('conversation.warning_percentage', 80, 1, 99); // 1% - 99%
+
   return {
-    MAX_TOKENS: await configCache.getNumber('conversation.max_tokens', 150_000, 100, 1_000_000), // 100 - 1M
-    WARNING_TOKENS: await configCache.getNumber('conversation.warning_tokens', 120_000, 100, 1_000_000), // 100 - 1M
+    MAX_TOKENS: maxTokens,
+    WARNING_TOKENS: Math.floor(maxTokens * (warningPercentage / 100)), // Calculated dynamically
+    WARNING_PERCENTAGE: warningPercentage,
   };
 }
 
@@ -61,9 +65,7 @@ export async function getConversationLimits() {
 export async function getBudgetConfig() {
   return {
     DAILY_BUDGET_CENTS: await configCache.getNumber('budget.daily_cents', 100, 1, 1_000_000), // $0.01 - $10k
-    ALERT_THRESHOLD_1: await configCache.getNumber('budget.alert_threshold_1', 50, 1, 100), // 1% - 100%
-    ALERT_THRESHOLD_2: await configCache.getNumber('budget.alert_threshold_2', 75, 1, 100), // 1% - 100%
-    ALERT_THRESHOLD_3: await configCache.getNumber('budget.alert_threshold_3', 90, 1, 100), // 1% - 100%
+    WARNING_THRESHOLD: await configCache.getNumber('budget.warning_threshold', 80, 1, 99), // 1% - 99%
   };
 }
 

@@ -31,8 +31,10 @@ export default function ChatPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [conversationLimitReached, setConversationLimitReached] = useState(false);
+  const [conversationWarning, setConversationWarning] = useState(false);
   const [conversationTokens, setConversationTokens] = useState(0);
   const [maxTokens, setMaxTokens] = useState(150000); // Default, updated from backend
+  const [warningTokens, setWarningTokens] = useState(120000); // Default 80%, updated from backend
   const [refreshSidebar, setRefreshSidebar] = useState(0);
   const [isConversationArchived, setIsConversationArchived] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -103,13 +105,22 @@ export default function ChatPage() {
       const isArchived = !!response.data.conversation?.archivedAt;
       setIsConversationArchived(isArchived);
 
+      // Store limits from backend
+      const max = response.data.maxTokens || 150000;
+      const warning = response.data.warningTokens || Math.floor(max * 0.8);
+      setMaxTokens(max);
+      setWarningTokens(warning);
+
       // If archived, show the "Summarize & Continue" button
       if (isArchived) {
         setConversationLimitReached(true);
         setConversationTokens(response.data.conversation?.totalTokens || 0);
-        setMaxTokens(response.data.maxTokens || 150000); // Use actual limit from backend
       } else {
         setConversationLimitReached(false);
+        // Check if at warning level (not archived yet)
+        const tokens = response.data.conversation?.totalTokens || 0;
+        setConversationTokens(tokens);
+        setConversationWarning(tokens >= warning && tokens < max);
       }
 
       setError('');
@@ -131,6 +142,8 @@ export default function ChatPage() {
     setCurrentConversationId(null);
     setConversationLimitReached(false);
     setIsConversationArchived(false);
+    setConversationWarning(false);
+    setConversationTokens(0);
     setError('');
   }
 
@@ -220,6 +233,16 @@ export default function ChatPage() {
         setConversationLimitReached(true);
         setConversationTokens(response.data.conversationTokens);
         setMaxTokens(response.data.maxTokens);
+        setConversationWarning(false); // Clear warning when limit reached
+      } else if (response.data.conversationWarning) {
+        // Check if conversation warning reached (80%+)
+        setConversationWarning(true);
+        setConversationTokens(response.data.conversationTokens);
+        setMaxTokens(response.data.maxTokens);
+        setWarningTokens(response.data.warningTokens);
+      } else {
+        // Clear warning if below threshold
+        setConversationWarning(false);
       }
 
       // Reload stats
@@ -316,7 +339,7 @@ export default function ChatPage() {
               <p>Ask me anything about Magic: The Gathering.</p>
               {!user && (
                 <p className="mt-2 text-sm">
-                  Anonymous users get 3 messages per day. <a href="/register" className="text-blue-600">Register</a> for 50/day!
+                  Please <a href="/login" className="text-blue-600">login</a> or <a href="/register" className="text-blue-600">register</a> to start chatting!
                 </p>
               )}
             </div>
@@ -370,23 +393,41 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Conversation Limit Banner */}
+        {/* Conversation Warning Banner (80%) */}
+        {!conversationLimitReached && conversationWarning && conversationTokens !== undefined && maxTokens !== undefined && warningTokens !== undefined && (
+          <div className="border-t bg-amber-50 border-amber-200">
+            <div className="max-w-3xl mx-auto px-4 py-3">
+              <div className="flex items-center">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-800">
+                    Approaching Conversation Limit ({conversationTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens - {Math.round((conversationTokens / maxTokens) * 100)}%)
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    This conversation will be archived when it reaches {maxTokens.toLocaleString()} tokens. Consider summarizing soon.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Conversation Limit Banner (100%) - RED */}
         {conversationLimitReached && conversationTokens !== undefined && maxTokens !== undefined && (
-          <div className="border-t bg-yellow-50 border-yellow-200">
+          <div className="border-t bg-red-50 border-red-200">
             <div className="max-w-3xl mx-auto px-4 py-3">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-yellow-800">
+                  <p className="text-sm font-medium text-red-800">
                     Conversation Limit Reached ({conversationTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens)
                   </p>
-                  <p className="text-xs text-yellow-700 mt-1">
+                  <p className="text-xs text-red-700 mt-1">
                     This conversation is too long. Summarize to continue chatting.
                   </p>
                 </div>
                 <button
                   onClick={handleSummarizeAndContinue}
                   disabled={loading}
-                  className="ml-4 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-50 text-sm font-medium"
+                  className="ml-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 text-sm font-medium"
                 >
                   Summarize & Continue
                 </button>
@@ -398,14 +439,19 @@ export default function ChatPage() {
         {/* Input */}
         <div className="border-t bg-white">
         <div className="max-w-3xl mx-auto px-4 py-4">
-          {isConversationArchived ? (
+          {(isConversationArchived || conversationLimitReached) ? (
             <div className="text-center py-4">
-              <p className="text-gray-500 mb-2">This conversation is archived and read-only</p>
+              <p className="text-gray-500 mb-2">
+                {isConversationArchived
+                  ? 'This conversation is archived and read-only'
+                  : 'This conversation has reached its limit'}
+              </p>
               <button
-                onClick={startNewConversation}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                onClick={conversationLimitReached ? handleSummarizeAndContinue : startNewConversation}
+                disabled={loading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                Start New Conversation
+                {conversationLimitReached ? 'Summarize & Continue' : 'Start New Conversation'}
               </button>
             </div>
           ) : (

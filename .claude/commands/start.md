@@ -237,6 +237,45 @@ When the current sub-phase is complete:
 6. Commit if milestone reached
 7. Move to next task
 
+### Server Management (CRITICAL)
+
+**ALWAYS use `./dev.sh` for server management. NEVER manually run `pnpm run dev &` in background.**
+
+**Common Commands:**
+- `./dev.sh start` - Start all services (Docker, backend, frontend)
+- `./dev.sh restart-backend` - **USE THIS for backend code changes** (fast, clean)
+- `./dev.sh restart-frontend` - Restart frontend only
+- `./dev.sh status` - Check what's running
+- `./dev.sh stop` - Stop everything cleanly
+- `./dev.sh logs-backend` - View backend logs
+- `./dev.sh logs-frontend` - View frontend logs
+
+**Why use dev.sh:**
+- Properly kills all zombie processes (prevents multiple servers)
+- Tracks PIDs correctly
+- Works reliably on WSL/Windows
+- Manages Docker containers
+- Provides clean logs
+
+**When to restart backend:**
+- After creating new route files
+- After modifying middleware
+- After database migrations
+- After changing environment variables
+- When tsx watch doesn't auto-reload (WSL issue)
+
+**Example workflow:**
+```bash
+# After creating backend/src/routes/admin.ts
+./dev.sh restart-backend
+
+# Check if it worked
+./dev.sh status
+
+# View logs if issues
+./dev.sh logs-backend
+```
+
 ---
 
 ## 🎭 Your Persona

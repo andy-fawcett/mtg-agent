@@ -99,15 +99,6 @@ export default function LoginPage() {
               Don&apos;t have an account? Register
             </Link>
           </div>
-
-          <div className="text-center">
-            <Link
-              href="/chat"
-              className="text-sm text-gray-600 hover:text-gray-500"
-            >
-              Try as anonymous (3 messages/day)
-            </Link>
-          </div>
         </form>
       </div>
     </div>

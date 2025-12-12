@@ -57,10 +57,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 import authRoutes from './routes/auth';
 import chatRoutes from './routes/chat';
 import conversationRoutes from './routes/conversations';
+import adminRoutes from './routes/admin';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationRoutes);  // NEW: Phase 1.7
+app.use('/api/admin', adminRoutes);  // NEW: Phase 1.8
 
 // ======================
 // Health Check Endpoint

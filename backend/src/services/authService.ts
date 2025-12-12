@@ -97,6 +97,11 @@ export class AuthService {
       throw new Error('Invalid email or password');
     }
 
+    // Check if user is suspended (BEFORE creating session)
+    if (user.suspended) {
+      throw new Error('Your account has been suspended. Please contact support.');
+    }
+
     // Create session for authenticated user
     session.userId = user.id;
     session.email = user.email;

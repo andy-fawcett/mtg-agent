@@ -36,6 +36,7 @@ router.post(
 
       // Get conversation limits from database
       const conversationLimits = await getConversationLimits();
+      console.log('DEBUG - Conversation limits:', conversationLimits);
 
       // Check conversation exists if conversationId provided
       if (conversationId && userId) {
@@ -70,6 +71,7 @@ router.post(
 
       // Check if conversation NOW exceeds limit (after this message)
       let limitReached = false;
+      let warningReached = false;
       let totalTokens = 0;
       if (response.conversationId && userId) {
         const { ConversationModel } = await import('../models/Conversation');
@@ -77,6 +79,15 @@ router.post(
         if (updatedConversation) {
           totalTokens = updatedConversation.totalTokens;
           limitReached = totalTokens >= conversationLimits.MAX_TOKENS;
+          warningReached = totalTokens >= conversationLimits.WARNING_TOKENS && !limitReached;
+
+          console.log('DEBUG - Conversation check:', {
+            totalTokens,
+            maxTokens: conversationLimits.MAX_TOKENS,
+            warningTokens: conversationLimits.WARNING_TOKENS,
+            limitReached,
+            warningReached
+          });
 
           // Archive conversation immediately when limit is reached
           if (limitReached) {
@@ -99,6 +110,13 @@ router.post(
           conversationLimitReached: true,
           conversationTokens: totalTokens,
           maxTokens: conversationLimits.MAX_TOKENS,
+        }),
+        // Conversation warning info (if at 80%+ but not archived)
+        ...(warningReached && {
+          conversationWarning: true,
+          conversationTokens: totalTokens,
+          maxTokens: conversationLimits.MAX_TOKENS,
+          warningTokens: conversationLimits.WARNING_TOKENS,
         }),
       });
     } catch (error: any) {
