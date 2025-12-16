@@ -243,7 +243,7 @@ When the current sub-phase is complete:
 
 **Common Commands:**
 - `./dev.sh start` - Start all services (Docker, backend, frontend)
-- `./dev.sh restart-backend` - **USE THIS for backend code changes** (fast, clean)
+- `./dev.sh restart-backend` - Restart backend (only needed for specific cases below)
 - `./dev.sh restart-frontend` - Restart frontend only
 - `./dev.sh status` - Check what's running
 - `./dev.sh stop` - Stop everything cleanly
@@ -253,27 +253,29 @@ When the current sub-phase is complete:
 **Why use dev.sh:**
 - Properly kills all zombie processes (prevents multiple servers)
 - Tracks PIDs correctly
-- Works reliably on WSL/Windows
+- Works reliably in native WSL filesystem
 - Manages Docker containers
 - Provides clean logs
 
-**When to restart backend:**
-- After creating new route files
-- After modifying middleware
-- After database migrations
-- After changing environment variables
-- When tsx watch doesn't auto-reload (WSL issue)
+**When to restart backend (hot-reload works for most changes!):**
+- ✅ Hot-reload works: Code changes in existing files auto-reload
+- 🔄 Restart needed only for:
+  - Creating new route files
+  - Modifying middleware registration in index.ts
+  - Database migrations
+  - Changing environment variables (.env file)
 
-**Example workflow:**
+**Example workflows:**
 ```bash
+# ✅ Most code changes - NO RESTART NEEDED (hot-reload works!)
+# Just edit backend/src/services/chatService.ts and save
+# Changes are picked up automatically by tsx watch
+
+# 🔄 New route file created - RESTART NEEDED
 # After creating backend/src/routes/admin.ts
 ./dev.sh restart-backend
-
-# Check if it worked
-./dev.sh status
-
-# View logs if issues
-./dev.sh logs-backend
+./dev.sh status          # Verify it's running
+./dev.sh logs-backend    # View logs if issues
 ```
 
 ---

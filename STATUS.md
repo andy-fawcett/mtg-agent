@@ -307,8 +307,9 @@ None currently.
     - ✅ Follow-up questions work correctly (conversation context maintained)
     - 🔧 Resolved: Initial 500 errors caused by zombie tsx processes (not code issue)
   - **Development Note:**
-    - tsx watch doesn't detect file changes on WSL-mounted filesystems (/mnt/c/)
-    - Manual server restarts required after code changes in this environment
+    - ✅ Hot-reload working perfectly in native WSL (moved from /mnt/c/ to native WSL filesystem)
+    - tsx watch auto-detects file changes - no manual restarts needed for code changes
+    - Use `./dev.sh restart-backend` only for new route files or middleware changes
   - **Next Steps:**
     - Implement frontend conversation sidebar
     - Implement frontend summarization UI

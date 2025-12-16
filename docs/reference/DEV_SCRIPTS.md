@@ -1,12 +1,13 @@
 # Development Scripts
 
 **Created:** 2025-11-11
+**Last Updated:** 2025-12-15
 **Status:** Active
 **Applies To:** All development phases
 
 ## Overview
 
-This document describes the development scripts used to manage the MTG Agent development environment.
+This document describes the `dev.sh` script used to manage the MTG Agent development environment in native WSL.
 
 ---
 
@@ -15,7 +16,7 @@ This document describes the development scripts used to manage the MTG Agent dev
 ### Start All Services
 
 ```bash
-./start-dev.sh
+./dev.sh start
 ```
 
 **What it does:**
@@ -28,19 +29,78 @@ This document describes the development scripts used to manage the MTG Agent dev
 ### Stop All Services
 
 ```bash
-./stop-dev.sh
+./dev.sh stop
 ```
 
 **What it does:**
-1. Stops backend server
-2. Stops frontend server
+1. Stops backend server (kills all tsx processes)
+2. Stops frontend server (kills all next-server processes)
 3. Stops Docker containers
+
+### Other Commands
+
+```bash
+# Check status of all services
+./dev.sh status
+
+# Restart backend only (fast, for code changes)
+./dev.sh restart-backend
+
+# Restart frontend only
+./dev.sh restart-frontend
+
+# Restart everything
+./dev.sh restart
+
+# View all logs
+./dev.sh logs
+
+# View backend logs only
+./dev.sh logs-backend
+
+# View frontend logs only
+./dev.sh logs-frontend
+
+# Show help
+./dev.sh help
+```
 
 ---
 
-## Scripts
+## Hot-Reload Support (NEW!)
 
-### `start-dev.sh`
+**✅ Hot-reload works in native WSL!**
+
+Since moving the project from Windows (`/mnt/c/`) to native WSL (`/home/andyv/`), tsx watch now properly detects file changes and automatically reloads the backend.
+
+**When hot-reload works (no restart needed):**
+- ✅ Code changes in existing backend files
+- ✅ Code changes in frontend files
+- ✅ Editing service files, middleware, models
+- ✅ Updating route handler logic
+
+**When you need to restart:**
+- 🔄 Creating new route files
+- 🔄 Modifying middleware registration in `index.ts`
+- 🔄 Database migrations
+- 🔄 Changing environment variables (`.env` file)
+
+**Example:**
+```bash
+# Edit backend/src/services/chatService.ts
+# Save the file
+# ✅ Backend automatically reloads - no restart needed!
+
+# Create backend/src/routes/newroute.ts
+# 🔄 Restart needed:
+./dev.sh restart-backend
+```
+
+---
+
+## Script Details
+
+### `./dev.sh start`
 
 **Purpose:** Start all development services in the correct order
 
@@ -73,64 +133,89 @@ This document describes the development scripts used to manage the MTG Agent dev
 **Example Output:**
 ```
 ======================================
-MTG Agent - Starting Development Environment
+Starting MTG Agent Development Environment
 ======================================
-ℹ Step 1/4: Starting Docker containers...
+ℹ Starting Docker containers...
 ℹ Waiting for containers to be healthy...
 ✓ Docker containers running
-ℹ Step 2/4: Starting backend server...
+ℹ Starting backend server...
 ℹ Waiting for backend to start...
 ✓ Backend server running (PID: 12345)
-ℹ Step 3/4: Starting frontend server...
+ℹ Starting frontend server...
 ℹ Waiting for frontend to start...
 ✓ Frontend server running (PID: 12346)
+
+✓ All services started!
+
 ======================================
-All Services Running!
+Service Status
 ======================================
 
-Backend:  http://localhost:3000
-Frontend: http://localhost:3001
+Docker:   ✓ Running
+Backend:  ✓ Running (http://localhost:3000)
+Frontend: ✓ Running (http://localhost:3001)
 
 Logs:
   Backend:  tail -f backend.log
   Frontend: tail -f frontend.log
-
-Stop servers:
-  ./stop-dev.sh
-  or: kill 12345 12346 && docker compose down
-
-✓ Ready for development!
+  Or run:   ./dev.sh logs
 ```
 
 ---
 
-### `stop-dev.sh`
+### `./dev.sh stop`
 
 **Purpose:** Gracefully stop all development services
 
 **Process:**
-1. Stops backend server (using PID file)
-2. Stops frontend server (using PID file)
-3. Falls back to pkill if PID files not found
+1. Kills all tsx watch processes (backend)
+2. Kills all next-server processes (frontend)
+3. Kills parent pnpm processes using PID files
 4. Stops Docker Compose services
 5. Cleans up PID files
+
+**Why it's thorough:**
+- Uses multiple pkill patterns to catch zombie processes
+- Targets specific process types (tsx, next-server, etc.)
+- Prevents multiple server instances from accumulating
+- Works reliably in WSL environment
 
 **Exit Codes:**
 - `0` - Success, all services stopped
 
-**Example Output:**
+---
+
+### `./dev.sh restart-backend`
+
+**Purpose:** Quickly restart only the backend server
+
+**Use when:**
+- Creating new route files
+- Modifying middleware registration
+- tsx watch fails to auto-reload (rare in native WSL)
+
+**Process:**
+1. Kills all backend processes
+2. Starts backend with fresh tsx watch
+3. Waits for health endpoint to respond
+
+**Speed:** ~3-5 seconds (much faster than full restart)
+
+---
+
+### `./dev.sh status`
+
+**Purpose:** Check running status of all services
+
+**Output:**
 ```
 ======================================
-MTG Agent - Stopping Development Environment
+Service Status
 ======================================
-ℹ Stopping backend (PID: 12345)...
-✓ Backend stopped
-ℹ Stopping frontend (PID: 12346)...
-✓ Frontend stopped
-ℹ Stopping Docker containers...
-✓ Docker containers stopped
 
-✓ All services stopped
+Docker:   ✓ Running
+Backend:  ✓ Running (http://localhost:3000)
+Frontend: ✓ Running (http://localhost:3001)
 ```
 
 ---
@@ -140,8 +225,8 @@ MTG Agent - Stopping Development Environment
 ### Script won't run: "Permission denied"
 
 ```bash
-# Make scripts executable
-chmod +x start-dev.sh stop-dev.sh
+# Make script executable
+chmod +x dev.sh
 ```
 
 ### Services fail to start
@@ -149,10 +234,10 @@ chmod +x start-dev.sh stop-dev.sh
 **Check logs:**
 ```bash
 # Backend logs
-tail -50 backend.log
+./dev.sh logs-backend
 
 # Frontend logs
-tail -50 frontend.log
+./dev.sh logs-frontend
 
 # Docker logs
 docker compose logs
@@ -166,7 +251,10 @@ docker compose logs
 ### Ports already in use
 
 ```bash
-# Find what's using the ports
+# Use dev.sh to cleanly stop everything
+./dev.sh stop
+
+# If that doesn't work, find what's using the ports
 lsof -i :3000  # Backend
 lsof -i :3001  # Frontend
 lsof -i :5434  # PostgreSQL
@@ -176,6 +264,19 @@ lsof -i :6379  # Redis
 kill -9 <PID>
 ```
 
+### Multiple server instances running
+
+```bash
+# Stop everything and clean up
+./dev.sh stop
+
+# Verify nothing is running
+./dev.sh status
+
+# Start fresh
+./dev.sh start
+```
+
 ### Docker containers won't start
 
 ```bash
@@ -183,8 +284,29 @@ kill -9 <PID>
 docker compose down -v
 
 # Start fresh
-./start-dev.sh
+./dev.sh start
 ```
+
+### Hot-reload not working
+
+**This should NOT happen in native WSL!** If it does:
+
+1. Verify you're in native WSL (not `/mnt/c/`):
+   ```bash
+   pwd
+   # Should show: /home/andyv/mtg-agent
+   # NOT: /mnt/c/Users/...
+   ```
+
+2. Restart backend manually:
+   ```bash
+   ./dev.sh restart-backend
+   ```
+
+3. Check backend logs for tsx errors:
+   ```bash
+   ./dev.sh logs-backend
+   ```
 
 ---
 
@@ -192,47 +314,42 @@ docker compose down -v
 
 ### When to Update Scripts
 
-**IMPORTANT:** These scripts must be updated whenever:
+**IMPORTANT:** The `dev.sh` script must be updated whenever:
 
 1. **New services are added**
    - Example: Adding a message queue, cache server, etc.
-   - Update both start and stop scripts
+   - Update start/stop/status logic
 
 2. **Ports change**
    - Update health check URLs
    - Update documentation
 
-3. **Database migrations are required**
-   - Add migration step to start-dev.sh
-   - Check if migrations should run automatically
+3. **New process types added**
+   - Add pkill patterns to stop functions
+   - Update status checks
 
 4. **New environment variables are required**
-   - Add validation to start-dev.sh
+   - Add validation to startup
    - Document in this file
-
-5. **Dependencies change**
-   - Update dependency installation steps
-   - Update package manager commands
 
 ### Update Process
 
 **Step 1: Modify the script**
 ```bash
 # Edit the script
-nano start-dev.sh
-# or
-nano stop-dev.sh
+nano dev.sh
 ```
 
 **Step 2: Test the changes**
 ```bash
 # Stop everything
-./stop-dev.sh
+./dev.sh stop
 
 # Test the updated script
-./start-dev.sh
+./dev.sh start
 
 # Verify all services work
+./dev.sh status
 curl http://localhost:3000/health
 curl http://localhost:3001
 ```
@@ -241,60 +358,77 @@ curl http://localhost:3001
 - Add new services to the "What it does" section
 - Update example output if changed
 - Add new troubleshooting steps if needed
-- Update the "When to Update Scripts" section
 
 **Step 4: Commit changes**
 ```bash
-git add start-dev.sh stop-dev.sh docs/reference/DEV_SCRIPTS.md
-git commit -m "docs: update dev scripts for [feature]"
+git add dev.sh docs/reference/DEV_SCRIPTS.md
+git commit -m "docs: update dev.sh for [feature]"
 ```
 
 ---
 
-## Future Enhancements
+## Architecture Notes
 
-### Planned Features
+### Why One Script (`dev.sh`) Instead of Multiple?
 
-- [ ] `restart-dev.sh` - Restart specific services
-- [ ] `status-dev.sh` - Check status of all services
-- [ ] `logs-dev.sh` - Tail logs from all services in one view
-- [ ] Windows support (`.bat` or PowerShell versions)
-- [ ] Health check validation before "Ready" message
-- [ ] Database migration auto-run on startup
-- [ ] Service-specific restart (e.g., `./restart-dev.sh backend`)
+**Benefits:**
+1. Single source of truth for dev environment management
+2. Easier to maintain (one file vs many)
+3. Subcommands provide clear intent (`start`, `stop`, `restart-backend`)
+4. Consistent interface (like git, docker)
 
-### Phase-Specific Updates Needed
+### Why Aggressive Process Killing?
 
-**Phase 1.7 (Chat Sessions):**
-- No script changes needed
+The script uses `pkill -9` (force kill) instead of graceful SIGTERM because:
 
-**Phase 1.8 (Admin Dashboard):**
-- No script changes needed (same frontend/backend)
+1. **WSL quirk:** Zombie processes accumulate easily
+2. **Dev environment:** Safe to force kill (no production data)
+3. **Multiple patterns:** Catches all variants (tsx, node, pnpm)
+4. **Reliability:** Ensures clean slate on restart
 
-**Phase 1.9 (Testing):**
-- Consider adding test database setup
-- May need separate `start-test.sh` script
+### PID File Management
 
-**Phase 2+ (Future):**
-- Add new services as they're introduced
-- Update health checks for new endpoints
+- `backend.pid` and `frontend.pid` track parent pnpm processes
+- Used as first attempt to kill processes
+- Falls back to pkill patterns if PID files missing
+- Cleaned up on stop to prevent stale PIDs
 
 ---
 
 ## Alternative: Manual Startup
 
-If scripts fail or you prefer manual control:
+If the script fails or you prefer manual control:
 
 ```bash
 # Terminal 1: Docker
 docker compose up
 
-# Terminal 2: Backend
+# Terminal 2: Backend (with hot-reload)
 cd backend && pnpm run dev
 
-# Terminal 3: Frontend
+# Terminal 3: Frontend (with hot-reload)
 cd frontend && pnpm run dev
 ```
+
+**Note:** Manual startup doesn't track PIDs, so you'll need to manually kill processes.
+
+---
+
+## Future Enhancements
+
+### Completed Features
+- ✅ `restart-backend` - Restart backend only
+- ✅ `restart-frontend` - Restart frontend only
+- ✅ `status` - Check status of all services
+- ✅ `logs` - Tail logs from all services
+- ✅ Service-specific logs (`logs-backend`, `logs-frontend`)
+
+### Planned Features
+- [ ] Health check validation before "Ready" message
+- [ ] Database migration auto-run on startup
+- [ ] Test database setup command
+- [ ] Docker-only mode (skip backend/frontend)
+- [ ] Watch mode (continuously tail logs after start)
 
 ---
 
@@ -302,10 +436,10 @@ cd frontend && pnpm run dev
 
 - Main documentation: [README.md](../../README.md)
 - Architecture: [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md)
-- Setup guide: Phase 1.0 documentation
+- Setup guide: [Phase 1.0 documentation](../implementation/PHASE_1_MVP/PHASE_1.0_FOUNDATION.md)
 
 ---
 
-**Last Updated:** 2025-11-11
+**Last Updated:** 2025-12-15
 **Maintainer:** Keep in sync with project architecture
 **Next Review:** After each phase that adds new services

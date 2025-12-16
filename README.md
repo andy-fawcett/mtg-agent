@@ -25,10 +25,16 @@ A production-ready web application providing an AI-powered Magic: The Gathering 
 
 ```bash
 # Start all services (Docker, Backend, Frontend)
-./start-dev.sh
+./dev.sh start
 
 # Stop all services
-./stop-dev.sh
+./dev.sh stop
+
+# Check status
+./dev.sh status
+
+# View logs
+./dev.sh logs
 ```
 
 **What starts:**
