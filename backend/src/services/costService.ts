@@ -1,38 +1,24 @@
 import { DailyCostModel } from '../models/DailyCost';
 import { redisClient } from '../config/redis';
 import { getBudgetConfig } from '../config/limits';
-
-// Claude Pricing (as of September 2025)
-const PRICING = {
-  // Claude 4.5 Sonnet (latest)
-  'claude-sonnet-4-5-20250929': {
-    input: 3.0 / 1_000_000,  // $3 per million input tokens
-    output: 15.0 / 1_000_000, // $15 per million output tokens
-  },
-  // Claude 3.5 Sonnet (legacy - same pricing)
-  'claude-3-5-sonnet-20241022': {
-    input: 3.0 / 1_000_000,  // $3 per million input tokens
-    output: 15.0 / 1_000_000, // $15 per million output tokens
-  },
-};
+import { getModelPricing } from '../config/pricing';
 
 export class CostService {
   /**
    * Estimate cost for a request before making the API call
    * Uses rough estimation: 1 token ≈ 4 characters
+   * Pricing loaded from database with caching
    */
-  static estimateCost(
+  static async estimateCost(
     messageLength: number,
     maxOutputTokens: number,
     model: string = 'claude-sonnet-4-5-20250929'
-  ): number {
+  ): Promise<number> {
     // Rough estimation: 1 token ≈ 4 characters
     const estimatedInputTokens = Math.ceil(messageLength / 4);
 
-    const pricing = PRICING[model as keyof typeof PRICING];
-    if (!pricing) {
-      throw new Error(`Unknown model: ${model}`);
-    }
+    // Get pricing from database (cached)
+    const pricing = await getModelPricing(model);
 
     const inputCost = estimatedInputTokens * pricing.input;
     const outputCost = maxOutputTokens * pricing.output;
@@ -118,6 +104,7 @@ export class CostService {
   /**
    * Record actual cost after request completes
    * Updates daily costs and checks for budget alerts
+   * Pricing loaded from database with caching
    */
   static async recordCost(
     actualTokensUsed: number,
@@ -125,11 +112,9 @@ export class CostService {
   ): Promise<void> {
     // Calculate actual cost
     const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929';
-    const pricing = PRICING[model as keyof typeof PRICING];
 
-    if (!pricing) {
-      throw new Error(`Unknown model: ${model}`);
-    }
+    // Get pricing from database (cached)
+    const pricing = await getModelPricing(model);
 
     // Assume 50/50 input/output for simplicity (can be improved with actual token breakdown)
     const inputTokens = Math.floor(actualTokensUsed / 2);

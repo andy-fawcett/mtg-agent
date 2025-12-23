@@ -5,6 +5,7 @@ import { query as dbQuery } from '../config/database';
 import { UserModel } from '../models/User';
 import { logAdminAction } from '../utils/adminLogger';
 import { redisClient } from '../config/redis';
+import { ValidationError, ForbiddenError, NotFoundError } from '../utils/errors';
 
 const router = Router();
 
@@ -94,26 +95,19 @@ router.get('/users', async (req, res) => {
  * PATCH /api/admin/users/:id/tier
  * Update user tier
  */
-router.patch('/users/:id/tier', async (req, res) => {
+router.patch('/users/:id/tier', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { tier } = req.body;
     const adminId = req.session.userId!;
 
-    // Only allow assignable tiers (no 'anonymous')
-    if (!['free', 'premium', 'enterprise'].includes(tier)) {
-      return res.status(400).json({ success: false, message: 'Invalid tier' });
+    // Validate tier is provided
+    if (!tier) {
+      throw new ValidationError('Tier is required');
     }
 
-    // Get old tier for logging
-    const userResult = await dbQuery('SELECT tier, email FROM users WHERE id = $1', [id]);
-    const oldTier = userResult.rows[0]?.tier;
-    const email = userResult.rows[0]?.email;
-
-    await dbQuery(
-      'UPDATE users SET tier = $1, updated_at = NOW() WHERE id = $2',
-      [tier, id]
-    );
+    // Update tier using model (handles validation and returns old tier)
+    const { oldTier, email } = await UserModel.updateTier(id, tier);
 
     // Log the action
     await logAdminAction({
@@ -127,9 +121,15 @@ router.patch('/users/:id/tier', async (req, res) => {
     });
 
     res.json({ success: true, message: 'Tier updated' });
-  } catch (error) {
-    console.error('Failed to update tier:', error);
-    res.status(500).json({ success: false, message: 'Failed to update tier' });
+  } catch (error: any) {
+    // Convert model errors to appropriate HTTP errors
+    if (error.message.includes('Invalid tier')) {
+      return next(new ValidationError(error.message));
+    }
+    if (error.message === 'User not found') {
+      return next(new NotFoundError('User not found'));
+    }
+    next(error);
   }
 });
 
@@ -137,7 +137,7 @@ router.patch('/users/:id/tier', async (req, res) => {
  * PATCH /api/admin/users/:id/role
  * Update user role (admin/user)
  */
-router.patch('/users/:id/role', async (req, res) => {
+router.patch('/users/:id/role', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { role } = req.body;
@@ -145,26 +145,16 @@ router.patch('/users/:id/role', async (req, res) => {
 
     // Prevent changing your own role
     if (id === adminId) {
-      return res.status(400).json({ success: false, message: 'Cannot change your own role' });
+      throw new ForbiddenError('Cannot change your own role');
     }
 
-    if (!['user', 'admin'].includes(role)) {
-      return res.status(400).json({ success: false, message: 'Invalid role' });
+    // Validate role is provided
+    if (!role) {
+      throw new ValidationError('Role is required');
     }
 
-    // Get old role and email for logging
-    const userResult = await dbQuery('SELECT role, email FROM users WHERE id = $1', [id]);
-    const oldRole = userResult.rows[0]?.role;
-    const email = userResult.rows[0]?.email;
-
-    if (!userResult.rows[0]) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    await dbQuery(
-      'UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2',
-      [role, id]
-    );
+    // Update role using model (handles validation and returns old role)
+    const { oldRole, email } = await UserModel.updateRole(id, role);
 
     // Log the action
     await logAdminAction({
@@ -178,9 +168,15 @@ router.patch('/users/:id/role', async (req, res) => {
     });
 
     res.json({ success: true, message: 'Role updated' });
-  } catch (error) {
-    console.error('Failed to update role:', error);
-    res.status(500).json({ success: false, message: 'Failed to update role' });
+  } catch (error: any) {
+    // Convert model errors to appropriate HTTP errors
+    if (error.message.includes('Invalid role')) {
+      return next(new ValidationError(error.message));
+    }
+    if (error.message === 'User not found') {
+      return next(new NotFoundError('User not found'));
+    }
+    next(error);
   }
 });
 
@@ -189,7 +185,7 @@ router.patch('/users/:id/role', async (req, res) => {
  * Suspend or unsuspend a user account
  * When suspended, user cannot log in and all active sessions are terminated
  */
-router.patch('/users/:id/suspend', async (req, res) => {
+router.patch('/users/:id/suspend', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { suspended } = req.body;
@@ -197,28 +193,16 @@ router.patch('/users/:id/suspend', async (req, res) => {
 
     // Prevent suspending yourself
     if (id === adminId) {
-      return res.status(400).json({ success: false, message: 'Cannot suspend your own account' });
+      throw new ForbiddenError('Cannot suspend your own account');
     }
 
-    if (typeof suspended !== 'boolean') {
-      return res.status(400).json({ success: false, message: 'suspended must be a boolean' });
+    // Validate suspended is provided
+    if (suspended === undefined) {
+      throw new ValidationError('suspended field is required');
     }
 
-    // Get user info for logging
-    const userResult = await dbQuery('SELECT email, suspended FROM users WHERE id = $1 AND deleted_at IS NULL', [id]);
-
-    if (!userResult.rows[0]) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    const email = userResult.rows[0].email;
-    const wasSuspended = userResult.rows[0].suspended;
-
-    // Update suspension status
-    await dbQuery(
-      'UPDATE users SET suspended = $1, updated_at = NOW() WHERE id = $2',
-      [suspended, id]
-    );
+    // Update suspension using model (handles validation and returns old status)
+    const { wasSuspended, email } = await UserModel.setSuspension(id, suspended);
 
     // If suspending, delete all active sessions to kick them out immediately
     let sessionsDeleted = 0;
@@ -247,9 +231,15 @@ router.patch('/users/:id/suspend', async (req, res) => {
       message: suspended ? 'User suspended and logged out' : 'User unsuspended',
       sessionsDeleted,
     });
-  } catch (error) {
-    console.error('Failed to update suspension:', error);
-    res.status(500).json({ success: false, message: 'Failed to update suspension' });
+  } catch (error: any) {
+    // Convert model errors to appropriate HTTP errors
+    if (error.message.includes('must be a boolean')) {
+      return next(new ValidationError(error.message));
+    }
+    if (error.message === 'User not found') {
+      return next(new NotFoundError('User not found'));
+    }
+    next(error);
   }
 });
 
@@ -257,21 +247,26 @@ router.patch('/users/:id/suspend', async (req, res) => {
  * DELETE /api/admin/users/:id
  * Soft delete user
  */
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     const adminId = req.session.userId!;
 
     // Prevent deleting yourself
     if (id === adminId) {
-      return res.status(400).json({ success: false, message: 'Cannot delete your own account' });
+      throw new ForbiddenError('Cannot delete your own account');
     }
 
     // Get user email for logging
-    const userResult = await dbQuery('SELECT email FROM users WHERE id = $1', [id]);
-    const email = userResult.rows[0]?.email;
+    const user = await UserModel.findById(id);
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
 
-    await UserModel.delete(id);
+    const deleted = await UserModel.delete(id);
+    if (!deleted) {
+      throw new NotFoundError('User not found or already deleted');
+    }
 
     // Log the action
     await logAdminAction({
@@ -279,15 +274,14 @@ router.delete('/users/:id', async (req, res) => {
       actionType: 'user_delete',
       targetType: 'user',
       targetId: id,
-      details: { email },
+      details: { email: user.email },
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
 
     res.json({ success: true, message: 'User deleted' });
   } catch (error) {
-    console.error('Failed to delete user:', error);
-    res.status(500).json({ success: false, message: 'Failed to delete user' });
+    next(error);
   }
 });
 

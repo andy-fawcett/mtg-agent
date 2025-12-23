@@ -88,7 +88,7 @@ export async function budgetCheck(
 
     // Estimate cost for this request
     const messageLength = req.body.message?.length || 0;
-    const estimatedCost = CostService.estimateCost(messageLength, limits.maxOutputTokens);
+    const estimatedCost = await CostService.estimateCost(messageLength, limits.maxOutputTokens);
 
     // Check if we can afford it
     const canAfford = await CostService.canAffordRequest(estimatedCost);
@@ -143,6 +143,7 @@ export async function tokenBudgetCheck(
     const limits = await getTierLimits(tier);
 
     // Get user's tokens used today from database
+    // Dynamic import to avoid circular dependency
     const { UserDailyTokensModel } = await import('../models/UserDailyTokens');
     const tokensUsed = await UserDailyTokensModel.getTodayUsage(req.user.id);
 

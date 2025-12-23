@@ -24,12 +24,11 @@ export interface AuthResponse {
 
 export class AuthService {
   /**
-   * Register new user and create session
+   * Register new user
    * @param input - Registration details (email, password)
-   * @param session - Express session object
    * @returns Promise resolving to auth response with user data
    */
-  static async register(input: RegisterInput, session: Session): Promise<AuthResponse> {
+  static async register(input: RegisterInput): Promise<AuthResponse> {
     const { email, password } = input;
 
     // Validate email format
@@ -59,11 +58,6 @@ export class AuthService {
       tier: 'free', // New users start with free tier
     });
 
-    // Create session for the newly registered user
-    session.userId = user.id;
-    session.email = user.email;
-    session.tier = user.tier;
-
     return {
       user: {
         id: user.id,
@@ -75,12 +69,11 @@ export class AuthService {
   }
 
   /**
-   * Login user and create session
+   * Authenticate user credentials
    * @param input - Login credentials (email, password)
-   * @param session - Express session object
    * @returns Promise resolving to auth response with user data
    */
-  static async login(input: LoginInput, session: Session): Promise<AuthResponse> {
+  static async login(input: LoginInput): Promise<AuthResponse> {
     const { email, password } = input;
 
     // Find user by email
@@ -97,15 +90,10 @@ export class AuthService {
       throw new Error('Invalid email or password');
     }
 
-    // Check if user is suspended (BEFORE creating session)
+    // Check if user is suspended
     if (user.suspended) {
       throw new Error('Your account has been suspended. Please contact support.');
     }
-
-    // Create session for authenticated user
-    session.userId = user.id;
-    session.email = user.email;
-    session.tier = user.tier;
 
     return {
       user: {
@@ -122,7 +110,7 @@ export class AuthService {
    * @param session - Express session object
    * @returns Promise that resolves when session is destroyed
    */
-  static async logout(session: Session): Promise<void> {
+  static async logout(session: SessionWithData): Promise<void> {
     return new Promise((resolve, reject) => {
       session.destroy((err) => {
         if (err) {

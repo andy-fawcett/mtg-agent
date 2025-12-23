@@ -76,14 +76,9 @@ router.get('/:id', async (req: Request, res: Response) => {
     const messages = await ChatLogModel.getByConversationId(id);
 
     // Get conversation limits to include in response
+    // Dynamic import to avoid circular dependency
     const { getConversationLimits } = await import('../config/limits');
     const limits = await getConversationLimits();
-
-    console.log('GET /api/conversations/:id - conversation object:', {
-      id: conversation.id,
-      archivedAt: conversation.archivedAt,
-      deletedAt: conversation.deletedAt,
-    });
 
     res.json({
       success: true,

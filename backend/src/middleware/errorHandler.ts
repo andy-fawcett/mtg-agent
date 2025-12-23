@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { AppError, RateLimitError } from '../utils/errors';
 
 export interface ApiError extends Error {
   statusCode?: number;
@@ -11,30 +12,53 @@ export interface ApiError extends Error {
  * and returns a consistent error response
  */
 export function errorHandler(
-  err: ApiError,
+  err: ApiError | AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void {
-  // Log error
-  console.error('Error:', {
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    path: req.path,
-    method: req.method,
-  });
+  // Determine if this is an operational error
+  const isOperational = err instanceof AppError ? err.isOperational : err.isOperational ?? false;
 
-  // Determine status code
-  const statusCode = err.statusCode || 500;
-
-  // Send error response
-  res.status(statusCode).json({
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && {
+  // Log error (more verbose for non-operational errors)
+  if (!isOperational) {
+    console.error('UNEXPECTED ERROR:', {
+      message: err.message,
       stack: err.stack,
       path: req.path,
-    }),
-  });
+      method: req.method,
+    });
+  } else {
+    console.error('Error:', {
+      message: err.message,
+      path: req.path,
+      method: req.method,
+    });
+  }
+
+  // Determine status code
+  const statusCode = err instanceof AppError ? err.statusCode : (err.statusCode || 500);
+
+  // Build error response
+  const errorResponse: any = {
+    error: err.name || 'Error',
+    message: err.message || 'Internal server error',
+  };
+
+  // Add retry-after header for rate limit errors
+  if (err instanceof RateLimitError && err.retryAfter) {
+    res.set('Retry-After', String(err.retryAfter));
+    errorResponse.retryAfter = err.retryAfter;
+  }
+
+  // Add debug info in development
+  if (process.env.NODE_ENV === 'development') {
+    errorResponse.stack = err.stack;
+    errorResponse.path = req.path;
+  }
+
+  // Send error response
+  res.status(statusCode).json(errorResponse);
 }
 
 /**
@@ -43,7 +67,7 @@ export function errorHandler(
 export function notFoundHandler(
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void {
   res.status(404).json({
     error: 'Not found',

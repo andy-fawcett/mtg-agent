@@ -21,10 +21,39 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Register user (creates session automatically)
-    const result = await AuthService.register({ email, password }, req.session);
+    // Register user (without session - we'll create it here)
+    const result = await AuthService.register({ email, password });
 
-    res.status(201).json(result);
+    // Regenerate session to prevent session fixation attacks
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Session regeneration error:', err);
+        res.status(500).json({
+          error: 'Session creation failed',
+          message: 'Failed to create session after registration',
+        });
+        return;
+      }
+
+      // Set user data in new session
+      req.session.userId = result.user.id;
+      req.session.email = result.user.email;
+      req.session.tier = result.user.tier;
+
+      // Save session before sending response
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('Session save error:', saveErr);
+          res.status(500).json({
+            error: 'Session save failed',
+            message: 'Failed to save session after registration',
+          });
+          return;
+        }
+
+        res.status(201).json(result);
+      });
+    });
   } catch (error: any) {
     console.error('Registration error:', error);
 
@@ -77,10 +106,39 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    // Login user (creates session automatically)
-    const result = await AuthService.login({ email, password }, req.session);
+    // Login user (without session - we'll create it here)
+    const result = await AuthService.login({ email, password });
 
-    res.status(200).json(result);
+    // Regenerate session to prevent session fixation attacks
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Session regeneration error:', err);
+        res.status(500).json({
+          error: 'Session creation failed',
+          message: 'Failed to create session after login',
+        });
+        return;
+      }
+
+      // Set user data in new session
+      req.session.userId = result.user.id;
+      req.session.email = result.user.email;
+      req.session.tier = result.user.tier;
+
+      // Save session before sending response
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('Session save error:', saveErr);
+          res.status(500).json({
+            error: 'Session save failed',
+            message: 'Failed to save session after login',
+          });
+          return;
+        }
+
+        res.status(200).json(result);
+      });
+    });
   } catch (error: any) {
     console.error('Login error:', error);
 

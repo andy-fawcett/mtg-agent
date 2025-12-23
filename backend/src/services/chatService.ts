@@ -3,6 +3,7 @@ import { MTG_SYSTEM_PROMPT, detectJailbreakAttempt } from '../prompts/mtgSystemP
 import { CostService } from './costService';
 import { ChatLogModel } from '../models/ChatLog';
 import { getTierLimits } from '../config/limits';
+import { calculateCostCents } from '../config/pricing';
 
 export interface ChatRequest {
   message: string;
@@ -59,6 +60,7 @@ export class ChatService {
 
       // If user is authenticated and no conversation provided, create one
       if (userId && !activeConversationId) {
+        // Dynamic import to avoid circular dependency
         const { ConversationModel } = await import('../models/Conversation');
         const conversation = await ConversationModel.create(userId);
         activeConversationId = conversation.id;
@@ -69,6 +71,7 @@ export class ChatService {
       let summaryContext: string | null = null;
 
       if (activeConversationId) {
+        // Dynamic import to avoid circular dependency
         const { ConversationModel } = await import('../models/Conversation');
 
         // Get conversation to check for summary context
@@ -152,6 +155,7 @@ export class ChatService {
 
       // 14. Update user's daily token usage (Phase 1.7)
       if (userId) {
+        // Dynamic import to avoid circular dependency
         const { UserDailyTokensModel } = await import('../models/UserDailyTokens');
         await UserDailyTokensModel.addTokens(userId, tokensUsed);
       }
@@ -175,6 +179,7 @@ export class ChatService {
 
       // 16. Auto-generate conversation title if this is the first message
       if (activeConversationId && userId && conversationHistory.length === 1) {
+        // Dynamic import to avoid circular dependency
         const { ConversationModel } = await import('../models/Conversation');
         const title = ConversationModel.generateTitle(message);
         await ConversationModel.updateTitle(activeConversationId, userId, title);
@@ -260,34 +265,14 @@ export class ChatService {
 
   /**
    * Calculate actual cost based on token usage
-   * Uses pricing from CostService
+   * Uses centralized pricing from database (with caching)
    */
   private static async calculateActualCost(
     inputTokens: number,
     outputTokens: number,
     model: string
   ): Promise<number> {
-    // Pricing for Claude 4.5 Sonnet
-    const PRICING: Record<string, { input: number; output: number }> = {
-      'claude-sonnet-4-5-20250929': {
-        input: 3.0 / 1_000_000, // $3 per million input tokens
-        output: 15.0 / 1_000_000, // $15 per million output tokens
-      },
-      'claude-3-5-sonnet-20241022': {
-        input: 3.0 / 1_000_000,
-        output: 15.0 / 1_000_000,
-      },
-    };
-
-    const pricing = PRICING[model];
-    if (!pricing) {
-      throw new Error(`Unknown model: ${model}`);
-    }
-
-    const inputCost = inputTokens * pricing.input;
-    const outputCost = outputTokens * pricing.output;
-
-    // Return cost in cents
-    return Math.ceil((inputCost + outputCost) * 100);
+    // Use centralized pricing utility
+    return await calculateCostCents(inputTokens, outputTokens, model);
   }
 }

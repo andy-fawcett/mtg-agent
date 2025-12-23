@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserModel } from '../models/User';
-import { User, UserRole } from '../types/database.types';
+import { User } from '../types/database.types';
 import 'express-session';
 
 // Extend Express Request to include user information
@@ -10,14 +10,6 @@ declare global {
       user?: User;
       userId?: string;
     }
-  }
-}
-
-// Extend Express Session to include userRole
-declare module 'express-session' {
-  interface SessionData {
-    userId?: string;
-    userRole?: UserRole;
   }
 }
 
@@ -80,33 +72,6 @@ export async function requireAuth(
       error: 'Authentication error',
       message: 'Failed to verify authentication',
     });
-  }
-}
-
-/**
- * Optional authentication (doesn't fail if no session)
- * Attaches user to request if session exists, otherwise continues
- */
-export async function optionalAuth(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    if (req.session && req.session.userId) {
-      const user = await UserModel.findById(req.session.userId);
-
-      if (user) {
-        req.user = user;
-        req.userId = user.id;
-      }
-    }
-
-    next();
-  } catch (error) {
-    // Ignore errors for optional auth - don't block the request
-    console.error('optionalAuth middleware error:', error);
-    next();
   }
 }
 

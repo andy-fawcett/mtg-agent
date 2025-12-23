@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ChatService } from '../services/chatService';
-import { requireAuth, optionalAuth } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
 import { ipRateLimit, budgetCheck, tokenBudgetCheck } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { ChatSchema } from '../validation/schemas';
@@ -36,10 +36,10 @@ router.post(
 
       // Get conversation limits from database
       const conversationLimits = await getConversationLimits();
-      console.log('DEBUG - Conversation limits:', conversationLimits);
 
       // Check conversation exists if conversationId provided
       if (conversationId && userId) {
+        // Dynamic import to avoid circular dependency between routes and models
         const { ConversationModel } = await import('../models/Conversation');
         const conversation = await ConversationModel.getById(conversationId, userId);
 
@@ -74,20 +74,13 @@ router.post(
       let warningReached = false;
       let totalTokens = 0;
       if (response.conversationId && userId) {
+        // Dynamic import to avoid circular dependency
         const { ConversationModel } = await import('../models/Conversation');
         const updatedConversation = await ConversationModel.getById(response.conversationId, userId);
         if (updatedConversation) {
           totalTokens = updatedConversation.totalTokens;
           limitReached = totalTokens >= conversationLimits.MAX_TOKENS;
           warningReached = totalTokens >= conversationLimits.WARNING_TOKENS && !limitReached;
-
-          console.log('DEBUG - Conversation check:', {
-            totalTokens,
-            maxTokens: conversationLimits.MAX_TOKENS,
-            warningTokens: conversationLimits.WARNING_TOKENS,
-            limitReached,
-            warningReached
-          });
 
           // Archive conversation immediately when limit is reached
           if (limitReached) {
@@ -120,13 +113,7 @@ router.post(
         }),
       });
     } catch (error: any) {
-      // Write error to file for debugging
-      const fs = require('fs');
-      fs.appendFileSync('/tmp/chat-error.log', `\n\n=== ${new Date().toISOString()} ===\n`);
-      fs.appendFileSync('/tmp/chat-error.log', `Error: ${error}\n`);
-      fs.appendFileSync('/tmp/chat-error.log', `Message: ${error.message}\n`);
-      fs.appendFileSync('/tmp/chat-error.log', `Stack: ${error.stack}\n`);
-
+      // Log error details (captured by process manager)
       console.error('Chat endpoint error:', error);
       console.error('Error stack:', error.stack);
       console.error('Error message:', error.message);
@@ -169,6 +156,7 @@ router.get(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
+      // Dynamic import to avoid circular dependency
       const { ChatLogModel } = await import('../models/ChatLog');
 
       const limitParam = parseInt(req.query.limit as string) || 50;
@@ -205,6 +193,7 @@ router.get(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
+      // Dynamic imports to avoid circular dependencies
       const { ChatLogModel } = await import('../models/ChatLog');
       const { UserDailyTokensModel } = await import('../models/UserDailyTokens');
       const { getTierLimits } = await import('../config/limits');

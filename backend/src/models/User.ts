@@ -126,4 +126,99 @@ export class UserModel {
 
     return parseInt(result.rows[0]!.count);
   }
+
+  /**
+   * Update user tier (admin operation)
+   * @returns Object with oldTier and email for logging
+   */
+  static async updateTier(
+    id: string,
+    tier: string
+  ): Promise<{ oldTier: string; email: string }> {
+    // Validate tier
+    const validTiers = ['free', 'premium', 'enterprise'];
+    if (!validTiers.includes(tier)) {
+      throw new Error(`Invalid tier. Must be one of: ${validTiers.join(', ')}`);
+    }
+
+    // Get current tier and email for logging
+    const user = await this.findById(id);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Update tier
+    await query(
+      `UPDATE users SET tier = $1, updated_at = NOW() WHERE id = $2`,
+      [tier, id]
+    );
+
+    return {
+      oldTier: user.tier,
+      email: user.email,
+    };
+  }
+
+  /**
+   * Update user role (admin operation)
+   * @returns Object with oldRole and email for logging
+   */
+  static async updateRole(
+    id: string,
+    role: string
+  ): Promise<{ oldRole: string; email: string }> {
+    // Validate role
+    const validRoles = ['user', 'admin'];
+    if (!validRoles.includes(role)) {
+      throw new Error(`Invalid role. Must be one of: ${validRoles.join(', ')}`);
+    }
+
+    // Get current role and email for logging
+    const user = await this.findById(id);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Update role
+    await query(
+      `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2`,
+      [role, id]
+    );
+
+    return {
+      oldRole: user.role,
+      email: user.email,
+    };
+  }
+
+  /**
+   * Set user suspension status (admin operation)
+   * @returns Object with wasSuspended and email for logging
+   */
+  static async setSuspension(
+    id: string,
+    suspended: boolean
+  ): Promise<{ wasSuspended: boolean; email: string }> {
+    // Validate suspended is boolean
+    if (typeof suspended !== 'boolean') {
+      throw new Error('suspended must be a boolean');
+    }
+
+    // Get current suspension status and email for logging
+    const user = await this.findById(id);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Update suspension status
+    await query(
+      `UPDATE users SET suspended = $1, updated_at = NOW() WHERE id = $2`,
+      [suspended, id]
+    );
+
+    return {
+      wasSuspended: user.suspended,
+      email: user.email,
+    };
+  }
 }

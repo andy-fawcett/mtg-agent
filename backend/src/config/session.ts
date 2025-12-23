@@ -38,8 +38,9 @@ export function getSessionConfig(): session.SessionOptions {
 // Extend Express session to include user data
 declare module 'express-session' {
   interface SessionData {
-    userId: string;
-    email: string;
-    tier: string;
+    userId?: string;
+    email?: string;
+    tier?: string;
+    userRole?: string;
   }
 }
