@@ -1,3 +1,4 @@
+import type { Router as IRouter } from 'express';
 import { Router, Request, Response } from 'express';
 import { ChatService } from '../services/chatService';
 import { requireAuth } from '../middleware/auth';
@@ -6,7 +7,7 @@ import { validate } from '../middleware/validate';
 import { ChatSchema } from '../validation/schemas';
 import { getConversationLimits } from '../config/limits';
 
-const router = Router();
+const router: IRouter = Router();
 
 /**
  * POST /api/chat
@@ -44,20 +45,22 @@ router.post(
         const conversation = await ConversationModel.getById(conversationId, userId);
 
         if (!conversation) {
-          return res.status(404).json({
+          res.status(404).json({
             error: 'Conversation not found',
             message: 'The specified conversation does not exist',
           });
+          return;
         }
 
         // Block if ALREADY over limit (allow the message that reaches limit)
         if (conversation.totalTokens >= conversationLimits.MAX_TOKENS) {
-          return res.status(400).json({
+          res.status(400).json({
             error: 'conversation_limit_reached',
             message: 'This conversation has reached its maximum length.',
             conversationTokens: conversation.totalTokens,
             maxTokens: conversationLimits.MAX_TOKENS,
           });
+          return;
         }
       }
 
@@ -215,7 +218,7 @@ router.get(
           tokensUsed: tokensUsedToday,
           tokensLimit: limits.tokensPerDay,
           tokensRemaining: Math.max(0, limits.tokensPerDay - tokensUsedToday),
-          tokensPercentUsed: Math.min(100, ((tokensUsedToday / limits.tokensPerDay) * 100).toFixed(1)),
+          tokensPercentUsed: Math.min(100, Number(((tokensUsedToday / limits.tokensPerDay) * 100).toFixed(1))),
         },
       });
     } catch (error) {

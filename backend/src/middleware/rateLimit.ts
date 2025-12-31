@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { RateLimiterRedis } from 'rate-limiter-flexible';
 import { redisClient } from '../config/redis';
-import { getRateLimitConfig, getTierLimits, getBudgetConfig } from '../config/limits';
+import { getRateLimitConfig, getTierLimits } from '../config/limits';
 
 // IP limiter cache - recreated when config changes
 let ipLimiter: RateLimiterRedis;

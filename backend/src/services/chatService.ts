@@ -164,7 +164,7 @@ export class ChatService {
       await ChatLogModel.create({
         user_id: userId,
         session_id: sessionId,
-        conversation_id: activeConversationId,
+        conversation_id: activeConversationId || undefined,
         user_message: message,
         assistant_response: responseText,
         message_length: message.length,

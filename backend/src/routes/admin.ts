@@ -1,3 +1,4 @@
+import type { Router as IRouter } from 'express';
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/adminAuth';
@@ -7,7 +8,7 @@ import { logAdminAction } from '../utils/adminLogger';
 import { redisClient } from '../config/redis';
 import { ValidationError, ForbiddenError, NotFoundError } from '../utils/errors';
 
-const router = Router();
+const router: IRouter = Router();
 
 /**
  * Delete all Redis sessions for a specific user
@@ -289,7 +290,7 @@ router.delete('/users/:id', async (req, res, next) => {
  * GET /api/admin/analytics/overview
  * Get system-wide analytics
  */
-router.get('/analytics/overview', async (req, res) => {
+router.get('/analytics/overview', async (_req, res) => {
   try {
     // Total users
     const usersResult = await dbQuery('SELECT COUNT(*) FROM users WHERE deleted_at IS NULL');
@@ -452,7 +453,8 @@ router.patch('/config/:key', async (req, res) => {
     const adminId = req.session.userId!;
 
     if (!value) {
-      return res.status(400).json({ success: false, message: 'Value is required' });
+      res.status(400).json({ success: false, message: 'Value is required' });
+      return;
     }
 
     // Get old value for logging
@@ -479,6 +481,7 @@ router.patch('/config/:key', async (req, res) => {
   } catch (error) {
     console.error('Failed to update config:', error);
     res.status(500).json({ success: false, message: 'Failed to update config' });
+    return;
   }
 });
 
@@ -564,7 +567,7 @@ router.get('/analytics/top-users', async (req, res) => {
  * GET /api/admin/alerts
  * Get current system alerts
  */
-router.get('/alerts', async (req, res) => {
+router.get('/alerts', async (_req, res) => {
   try {
     const alerts: Array<{
       type: string;

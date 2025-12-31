@@ -1,12 +1,13 @@
+import type { Router as IRouter } from 'express';
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { ConversationModel } from '../models/Conversation';
 import { ChatLogModel } from '../models/ChatLog';
-import { CONVERSATION_LIMITS, SUMMARIZATION_PROMPT } from '../config/limits';
+import { SUMMARIZATION_PROMPT } from '../config/limits';
 import { anthropic, CLAUDE_CONFIG } from '../config/anthropic';
 import { MTG_SYSTEM_PROMPT } from '../prompts/mtgSystemPrompt';
 
-const router = Router();
+const router: IRouter = Router();
 
 // All routes require authentication
 router.use(requireAuth);
@@ -63,13 +64,19 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      res.status(400).json({ success: false, message: 'Invalid conversation ID' });
+      return;
+    }
+
     const conversation = await ConversationModel.getById(id, req.user!.id);
 
     if (!conversation) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Conversation not found',
       });
+      return;
     }
 
     // Get all messages in the conversation
@@ -112,20 +119,27 @@ router.patch('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { title } = req.body;
 
+    if (!id) {
+      res.status(400).json({ success: false, message: 'Invalid conversation ID' });
+      return;
+    }
+
     if (!title || typeof title !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Title is required',
       });
+      return;
     }
 
     // Verify conversation belongs to user
     const conversation = await ConversationModel.getById(id, req.user!.id);
     if (!conversation) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Conversation not found',
       });
+      return;
     }
 
     await ConversationModel.updateTitle(id, req.user!.id, title);
@@ -151,13 +165,19 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      res.status(400).json({ success: false, message: 'Invalid conversation ID' });
+      return;
+    }
+
     // Verify conversation belongs to user
     const conversation = await ConversationModel.getById(id, req.user!.id);
     if (!conversation) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Conversation not found',
       });
+      return;
     }
 
     await ConversationModel.delete(id, req.user!.id);
@@ -183,23 +203,30 @@ router.post('/:id/summarize-and-continue', async (req: Request, res: Response) =
   try {
     const { id } = req.params;
 
+    if (!id) {
+      res.status(400).json({ success: false, message: 'Invalid conversation ID' });
+      return;
+    }
+
     // Get conversation
     const conversation = await ConversationModel.getById(id, req.user!.id);
     if (!conversation) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Conversation not found',
       });
+      return;
     }
 
     // Get all messages
     const messages = await ChatLogModel.getByConversationId(id);
 
     if (messages.length === 0) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Cannot summarize empty conversation',
       });
+      return;
     }
 
     // Build conversation history for Claude

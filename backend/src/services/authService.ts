@@ -3,6 +3,13 @@ import { hashPassword, verifyPassword, validatePasswordStrength, validateEmail }
 import { User } from '../types/database.types';
 import { Session } from 'express-session';
 
+// Session with user data
+interface SessionWithData extends Session {
+  userId?: string;
+  email?: string;
+  tier?: string;
+}
+
 export interface RegisterInput {
   email: string;
   password: string;
@@ -18,6 +25,7 @@ export interface AuthResponse {
     id: string;
     email: string;
     tier: string;
+    role: string;
     emailVerified: boolean;
   };
 }
@@ -63,6 +71,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         tier: user.tier,
+        role: user.role,
         emailVerified: user.email_verified,
       },
     };
@@ -100,6 +109,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         tier: user.tier,
+        role: user.role,
         emailVerified: user.email_verified,
       },
     };
@@ -112,7 +122,7 @@ export class AuthService {
    */
   static async logout(session: SessionWithData): Promise<void> {
     return new Promise((resolve, reject) => {
-      session.destroy((err) => {
+      session.destroy((err: any) => {
         if (err) {
           reject(new Error('Failed to logout'));
         } else {

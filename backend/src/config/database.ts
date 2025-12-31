@@ -26,6 +26,9 @@ const config = {
 // Create connection pool
 let pool: Pool | null = null;
 
+// Direct pool access (for tests)
+export { pool };
+
 export async function getPool(): Promise<Pool> {
   if (!pool) {
     pool = new Pool(config);

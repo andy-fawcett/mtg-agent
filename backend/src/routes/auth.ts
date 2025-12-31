@@ -1,8 +1,9 @@
+import type { Router as IRouter } from 'express';
 import { Router, Request, Response } from 'express';
 import { AuthService } from '../services/authService';
 import { requireAuth } from '../middleware/auth';
 
-const router = Router();
+const router: IRouter = Router();
 
 /**
  * POST /api/auth/register
