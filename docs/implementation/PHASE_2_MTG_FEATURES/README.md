@@ -1,8 +1,8 @@
-# Phase 3: MTG Features
+# Phase 2: MTG Features
 
 **Status:** ⏸️ Not Started
 **Duration Estimate:** 1-2 weeks (30-40 hours)
-**Prerequisites:** Phase 1 (MVP) + Phase 2 (Security) complete
+**Prerequisites:** Phase 1 (MVP) complete
 **Target Completion:** 2025-12-06
 
 ## Overview
@@ -19,7 +19,7 @@ Add MTG-specific capabilities using Claude Agent SDK tools and skills. Transform
 
 ## Why This Phase
 
-After security is solid (Phase 2), we can focus on features that differentiate our MTG assistant from generic Claude chat. These features provide actual utility that MTG players will pay for.
+After MVP is complete (Phase 1), we build features that differentiate our MTG assistant from generic Claude chat. These features provide actual utility that MTG players will pay for and validate the product concept before comprehensive security hardening (Phase 3).
 
 ## Success Criteria
 
@@ -56,11 +56,11 @@ After security is solid (Phase 2), we can focus on features that differentiate o
 
 ## Related Documentation
 
-- [Agent SDK Security](../../AGENT_SDK_SECURITY.md)
-- [Previous Phase: Security](../PHASE_2_SECURITY/README.md)
-- [Next Phase: Production](../PHASE_4_PRODUCTION/README.md)
+- [Agent SDK Security](../../reference/AGENT_SDK_SECURITY.md)
+- [Previous Phase: MVP](../PHASE_1_MVP/README.md)
+- [Next Phase: Security Hardening](../PHASE_3_SECURITY/README.md)
 
 ---
 
-**Last Updated:** 2025-11-01
-**Next Phase:** [Phase 4: Production Ready](../PHASE_4_PRODUCTION/README.md)
+**Last Updated:** 2025-12-31
+**Next Phase:** [Phase 3: Security Hardening](../PHASE_3_SECURITY/README.md)

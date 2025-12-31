@@ -46,53 +46,8 @@ Build a secure, scalable MTG (Magic: The Gathering) chat assistant powered by Cl
 
 ---
 
-### 🔒 Phase 2: Security Hardening
-**Timeline:** Week 3 (1 week)
-**Goal:** Production-grade security BEFORE any public access
-**Access Level:** Still internal only
-**Status:** ⏸️ Not Started
-
-**Critical Focus:** Make system bulletproof against malicious users
-
-**What We're Building:**
-- Comprehensive penetration testing
-- Advanced jailbreak prevention and detection
-- DDoS protection setup (Cloudflare)
-- Rate limit stress testing (10,000+ requests)
-- Security audit of all endpoints
-- Input fuzzing and edge case testing
-- SQL injection prevention verification
-- XSS attack prevention testing
-- CSRF protection implementation
-- Advanced monitoring and alerting
-- Incident response procedures
-- Cost spike protection mechanisms
-- Account takeover prevention
-- Session hijacking countermeasures
-
-**Testing Approach:**
-- Automated security scanning
-- Manual penetration testing
-- Attack simulation scenarios
-- Load testing under stress
-- Security code review
-
-**Success Criteria:**
-- Passes automated security scans
-- Survives penetration testing
-- Rate limits hold under 10K concurrent requests
-- Cost caps prevent runaway spend
-- All OWASP Top 10 vulnerabilities addressed
-- Incident response plan tested
-
-**Deliverable:** Security-audited system ready for public traffic
-
-[📖 View Phase 2 Details](PHASE_2_SECURITY/README.md)
-
----
-
-### ⚙️ Phase 3: MTG Features
-**Timeline:** Weeks 4-5 (2 weeks)
+### ⚙️ Phase 2: MTG Features
+**Timeline:** Weeks 3-4 (2 weeks)
 **Goal:** Add MTG-specific capabilities using Agent SDK
 **Access Level:** Still internal/beta
 **Status:** ⏸️ Not Started
@@ -134,7 +89,52 @@ Build a secure, scalable MTG (Magic: The Gathering) chat assistant powered by Cl
 
 **Deliverable:** MTG-specific assistant with real utility
 
-[📖 View Phase 3 Details](PHASE_3_MTG_FEATURES/README.md)
+[📖 View Phase 2 Details](PHASE_2_MTG_FEATURES/README.md)
+
+---
+
+### 🔒 Phase 3: Security Hardening
+**Timeline:** Week 5 (1 week)
+**Goal:** Production-grade security BEFORE any public access
+**Access Level:** Still internal only
+**Status:** ⏸️ Not Started
+
+**Critical Focus:** Make system bulletproof against malicious users
+
+**What We're Building:**
+- Comprehensive penetration testing
+- Advanced jailbreak prevention and detection
+- DDoS protection setup (Cloudflare)
+- Rate limit stress testing (10,000+ requests)
+- Security audit of all endpoints
+- Input fuzzing and edge case testing
+- SQL injection prevention verification
+- XSS attack prevention testing
+- CSRF protection implementation
+- Advanced monitoring and alerting
+- Incident response procedures
+- Cost spike protection mechanisms
+- Account takeover prevention
+- Session hijacking countermeasures
+
+**Testing Approach:**
+- Automated security scanning
+- Manual penetration testing
+- Attack simulation scenarios
+- Load testing under stress
+- Security code review
+
+**Success Criteria:**
+- Passes automated security scans
+- Survives penetration testing
+- Rate limits hold under 10K concurrent requests
+- Cost caps prevent runaway spend
+- All OWASP Top 10 vulnerabilities addressed
+- Incident response plan tested
+
+**Deliverable:** Security-audited system ready for public traffic
+
+[📖 View Phase 3 Details](PHASE_3_SECURITY/README.md)
 
 ---
 
@@ -261,13 +261,13 @@ Phase 1 (MVP)
     ↓
     └─ Must complete before Phase 2
          ↓
-Phase 2 (Security)
+Phase 2 (MTG Features)  ← Build core product features first
+    ↓
+    └─ Validate product concept with real MTG features
+         ↓
+Phase 3 (Security)
     ↓
     └─ CRITICAL: Must pass before public access
-         ↓
-Phase 3 (MTG Features)  ← Can partially overlap with Phase 2
-    ↓
-    └─ Can start once security validated
          ↓
 Phase 4 (Production)  ← Builds on Phases 1-3
     ↓
@@ -282,8 +282,8 @@ Phase 5 (Advanced)  ← Continuous development
 
 ```
 Week 1-2:  Phase 1 (MVP)               [====================]
-Week 3:    Phase 2 (Security)          [==========]
-Week 4-5:  Phase 3 (MTG Features)      [====================]
+Week 3-4:  Phase 2 (MTG Features)      [====================]
+Week 5:    Phase 3 (Security)          [==========]
 Week 6-7:  Phase 4 (Production)        [====================]
 Week 8+:   Phase 5 (Advanced)          [================>
 
@@ -294,11 +294,11 @@ Week 8+:   Phase 5 (Advanced)          [================>
 ## Resource Requirements
 
 ### Development Time
-- **Phase 1:** 40-60 hours (full-time: 1-1.5 weeks)
-- **Phase 2:** 20-30 hours (full-time: 0.5-1 week)
-- **Phase 3:** 30-40 hours (full-time: 1 week)
-- **Phase 4:** 40-50 hours (full-time: 1-1.5 weeks)
-- **Phase 5:** Ongoing
+- **Phase 1:** 40-60 hours (full-time: 1-1.5 weeks) - MVP
+- **Phase 2:** 30-40 hours (full-time: 1 week) - MTG Features
+- **Phase 3:** 20-30 hours (full-time: 0.5-1 week) - Security
+- **Phase 4:** 40-50 hours (full-time: 1-1.5 weeks) - Production
+- **Phase 5:** Ongoing - Advanced Features
 
 **Total to Public Launch:** ~150-180 hours (4-5 weeks full-time)
 
@@ -414,16 +414,16 @@ Week 8+:   Phase 5 (Advanced)          [================>
 - [ ] Team confident in foundation
 
 **From Phase 2 → Phase 3:**
+- [ ] MTG features working well
+- [ ] User validation positive
+- [ ] Performance acceptable
+- [ ] Product concept validated
+
+**From Phase 3 → Phase 4:**
 - [ ] ALL security tests passed
 - [ ] Penetration testing complete
 - [ ] Security audit signed off
 - [ ] Incident response tested
-
-**From Phase 3 → Phase 4:**
-- [ ] MTG features working well
-- [ ] User validation positive
-- [ ] Performance acceptable
-- [ ] Security still solid
 
 **From Phase 4 → Public Launch:**
 - [ ] 2+ weeks of beta testing

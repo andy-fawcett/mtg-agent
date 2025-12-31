@@ -1,8 +1,8 @@
-# Phase 2: Security Hardening
+# Phase 3: Security Hardening
 
 **Status:** ⏸️ Not Started
 **Duration Estimate:** 1 week (20-30 hours)
-**Prerequisites:** Phase 1 (MVP) complete
+**Prerequisites:** Phase 1 (MVP) + Phase 2 (MTG Features) complete
 **Target Completion:** 2025-11-22
 
 ## Overview
@@ -96,12 +96,12 @@ Phase 2 is complete when ALL of the following are verified:
 
 ## Related Documentation
 
-- [Security Architecture](../../SECURITY_ARCHITECTURE.md)
-- [Security Checklist](../../SECURITY_CHECKLIST.md)
-- [Previous Phase: MVP](../PHASE_1_MVP/README.md)
-- [Next Phase: MTG Features](../PHASE_3_MTG_FEATURES/README.md)
+- [Security Architecture](../../reference/SECURITY_ARCHITECTURE.md)
+- [Security Checklist](../../reference/SECURITY_CHECKLIST.md)
+- [Previous Phase: MTG Features](../PHASE_2_MTG_FEATURES/README.md)
+- [Next Phase: Production](../PHASE_4_PRODUCTION/README.md)
 
 ---
 
-**Last Updated:** 2025-11-01
-**Next Phase:** [Phase 3: MTG Features](../PHASE_3_MTG_FEATURES/README.md)
+**Last Updated:** 2025-12-31
+**Next Phase:** [Phase 4: Production Ready](../PHASE_4_PRODUCTION/README.md)

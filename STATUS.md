@@ -77,11 +77,11 @@
   - ✅ Backend README.md created with comprehensive documentation
   - ✅ Cost-effective testing strategy (~$0.20 total vs $5-10 without mocking)
 
-### Phase 2: Security Hardening
-**Target:** Week 3 | **Status:** ⏸️ Not Started
+### Phase 2: MTG Features (formerly Phase 3)
+**Target:** Weeks 3-4 | **Status:** ⏸️ Not Started
 
-### Phase 3: MTG Features
-**Target:** Weeks 4-5 | **Status:** ⏸️ Not Started
+### Phase 3: Security Hardening (formerly Phase 2)
+**Target:** Week 5 | **Status:** ⏸️ Not Started
 
 ### Phase 4: Production Ready
 **Target:** Weeks 6-7 | **Status:** ⏸️ Not Started
@@ -97,7 +97,7 @@
 
 **Phase 1 MVP:** ✅ **100% COMPLETE**
 
-**Next Up:** Phase 2 - Security Hardening
+**Next Up:** Phase 2 - MTG Features (Agent SDK tools and skills)
 
 **What Phase 1.9 Delivered:**
 - ✅ Comprehensive integration test suite (34 tests passing)
@@ -463,12 +463,14 @@ All 9 sub-phases completed:
 9. ✅ Phase 1.8: Admin Dashboard
 10. ✅ Phase 1.9: Testing
 
-**Ready for Phase 2: Security Hardening**
-- Email verification
-- 2FA implementation
-- Enhanced admin security
-- Security audit
-- Penetration testing
+**Ready for Phase 2: MTG Features**
+- Scryfall card search tool
+- MTG rules lookup tool
+- Deck analysis skill
+- Price tracking integration
+- Agent SDK implementation
+
+**Phase 3 (Security Hardening) comes after MTG features**
 
 ---
 
